@@ -1,7 +1,7 @@
 // Bladerboek-viewer: rendert een PDF als boek met realistische pageturn (StPageFlip),
 // tekent papierblok, kaft en rug passend bij uitvoering en paginatal, en beheert opmerkingen.
 import * as pdfjsLib from './vendor/pdf.min.mjs';
-import { DEFAULT_HEADBANDS, headbandOf, headbandLabel } from './headbands.js';
+import { DEFAULT_HEADBANDS, headbandOf, headbandLabel, usableHeadbands } from './headbands.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
 
@@ -334,7 +334,7 @@ function setupEditMenu() {
 async function setupHeadbandPicker(save) {
   const sel = $('edHeadband'), custom = $('edHbCustom'), sw = $('edHbSwatch');
   let list = DEFAULT_HEADBANDS;
-  try { list = (await adminFetch('/api/admin/headbands')) || DEFAULT_HEADBANDS; } catch {}
+  try { list = usableHeadbands(await adminFetch('/api/admin/headbands')); } catch {}
   const cur = headbandOf(state.meta);
   const same = (h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || '');
   sel.innerHTML = list.map((h, i) => `<option value="${i}">${escapeHtml(headbandLabel(h))}</option>`).join('') + '<option value="custom">Eigen kleur…</option>';
