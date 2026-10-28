@@ -16,7 +16,7 @@ Een webtool om je boeken als realistisch bladerboek aan klanten te laten zien.
 De tool draait als Cloudflare Worker. PDF's en opmerkingen staan in één R2-bucket. Bij normaal gebruik valt dat binnen het gratis tegoed (10 GB opslag, gratis downloads). Een PDF mag maximaal 95 MB zijn.
 
 1. **R2 aanzetten.** Ga in het [Cloudflare-dashboard](https://dash.cloudflare.com) naar *Storage & databases → R2* en zet R2 aan. Cloudflare vraagt een betaalmethode, ook voor het gratis deel.
-2. **Bucket maken.** Klik op *Create bucket* en noem hem precies `bladerboek-boeken`. De rest laat je staan.
+2. **Bucket maken.** Klik op *Create bucket* en noem hem precies `pageturn`. De rest laat je staan.
 3. **Worker koppelen aan GitHub.** Ga naar *Workers & Pages → Create → Import a repository*. Koppel GitHub, kies `rudomenge/pageturn` en laat de voorgestelde instellingen staan (deploycommando `npx wrangler deploy`). Klik op *Deploy*.
 4. **Wachtwoord instellen.** Open de Worker *bladerboek* → *Settings → Variables and Secrets → Add*. Kies type *Secret*, naam `ADMIN_PASSWORD` en vul je wachtwoord in. Sla op met *Deploy*.
 5. **Klaar.** Open het adres dat Cloudflare toont (`https://bladerboek.<jouw-naam>.workers.dev`). Log in met een willekeurige gebruikersnaam en je wachtwoord, en upload je eerste boek.

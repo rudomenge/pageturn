@@ -12,7 +12,7 @@ not_found_handling = "none"
 
 [[r2_buckets]]
 binding = "BOOKS"
-bucket_name = "bladerboek-boeken"
+bucket_name = "pageturn"
 
 [observability]
 enabled = true
