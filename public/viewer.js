@@ -137,7 +137,6 @@ async function openPdf(src) {
   state.renderHeight = Math.round(Math.min(2200, Math.max(1000, window.innerHeight * (window.devicePixelRatio || 1) * 1.1)));
 
   document.title = state.meta.title || 'Bladerboek';
-  $('bookTitle').textContent = state.meta.title || 'Bladerboek';
   if (state.meta.coverColor && state.meta.coverColor !== 'auto') state.coverColor = state.meta.coverColor;
 
   await loadComments();
@@ -156,6 +155,7 @@ async function openPdf(src) {
   }
   $('loading').hidden = true;
   $('navbar').hidden = false;
+  $('sidePrev').hidden = $('sideNext').hidden = false;
   $('commentsBtn').hidden = !state.meta.allowComments;
   $('downloadBtn').hidden = !(state.meta.allowDownload && state.downloadUrl) || !!window.BLADERBOEK_DEMO;
   $('downloadBtn').href = state.downloadUrl || '#';
@@ -290,7 +290,7 @@ function computeLayout() {
   const W = area.clientWidth, H = area.clientHeight;
   const b = BINDINGS[state.binding];
   // Ruimte voor kaft-overstek, papierblok en schaduw.
-  const reserveX = 90, reserveY = 110;
+  const reserveX = W < 640 ? 96 : 150, reserveY = 110; // ruimte voor de pijltjes naast het boek
   const fit = (pagesAcross) => Math.max(120, Math.min(H - reserveY, (W - reserveX) / (pagesAcross * state.aspect)));
   const hL = fit(2), hP = fit(1);
   const landscape = W >= 640 && hL >= 0.55 * hP;
@@ -413,6 +413,8 @@ function onPageChange(instant) {
   if (state.landscape) setShift(idx === 0 ? -state.pw / 2 : idx === last ? state.pw / 2 : 0, instant);
   else setShift(0, instant);
   $('pageSlider').value = String(idx);
+  $('sidePrev').disabled = idx === 0;
+  $('sideNext').disabled = idx === last;
   $('pageInfo').textContent = spreadLabel();
   updateDecor();
   renderComments();
@@ -815,6 +817,8 @@ function setupUi() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
 
   $('prevBtn').addEventListener('click', () => state.flip?.flipPrev('bottom'));
+  $('sidePrev').addEventListener('click', () => state.flip?.flipPrev('bottom'));
+  $('sideNext').addEventListener('click', () => state.flip?.flipNext('bottom'));
   $('nextBtn').addEventListener('click', () => state.flip?.flipNext('bottom'));
   $('firstBtn').addEventListener('click', () => state.flip?.flip(0));
   $('lastBtn').addEventListener('click', () => state.flip?.flip(state.pages.length - 1));
@@ -823,8 +827,8 @@ function setupUi() {
 
   document.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea, select')) return;
-    if (e.key === 'ArrowRight' || e.key === 'PageDown') state.flip?.flipNext('bottom');
-    if (e.key === 'ArrowLeft' || e.key === 'PageUp') state.flip?.flipPrev('bottom');
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); state.flip?.flipNext('bottom'); pressFeedback('sideNext'); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); state.flip?.flipPrev('bottom'); pressFeedback('sidePrev'); }
     if (e.key === 'Home') state.flip?.flip(0);
     if (e.key === 'End') state.flip?.flip(state.pages.length - 1);
     if (e.key === 'Escape') { setPinMode(false); closePinPopover(); }
@@ -863,6 +867,13 @@ function setupUi() {
 
   let t;
   window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(relayout, 120); });
+}
+
+// Laat het pijltje naast het boek even 'indrukken' bij een toetsaanslag.
+function pressFeedback(id) {
+  const el = $(id);
+  el.classList.add('pressed');
+  setTimeout(() => el.classList.remove('pressed'), 150);
 }
 
 function setEnv(env) {

@@ -9,7 +9,6 @@
 </head>
 <body class="env-desk">
 <header class="topbar">
-  <div class="title" id="bookTitle">Bladerboek</div>
   <div class="controls">
     <button class="btn" id="commentsBtn" hidden>
       <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Opmerkingen</span><b id="commentCount"></b>
@@ -68,6 +67,12 @@
     </div>
 
     <div class="book-area" id="bookArea">
+      <button class="side-arrow prev" id="sidePrev" title="Vorige pagina (←)" aria-label="Vorige pagina" hidden>
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button class="side-arrow next" id="sideNext" title="Volgende pagina (→)" aria-label="Volgende pagina" hidden>
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
       <div class="book-host" id="bookHost">
         <div class="board board-left" id="boardLeft"></div>
         <div class="board board-right" id="boardRight"></div>
@@ -81,11 +86,7 @@
     </div>
 
     <div class="navbar" id="navbar" hidden>
-      <div class="placard" id="placard" hidden>
-        <div class="pl-title" id="plTitle"></div>
-        <div class="pl-line" id="plFormat"></div>
-        <div class="pl-line" id="plExtent"></div>
-      </div>
+      <div class="key-hint" aria-hidden="true"><kbd>←</kbd><kbd>→</kbd><span>bladeren met de pijltjestoetsen</span></div>
       <div class="nav-controls">
       <button class="nav" id="firstBtn" title="Naar omslag">⇤</button>
       <button class="nav" id="prevBtn" title="Vorige">‹</button>
@@ -93,6 +94,11 @@
       <span class="pageinfo" id="pageInfo"></span>
       <button class="nav" id="nextBtn" title="Volgende">›</button>
       <button class="nav" id="lastBtn" title="Naar achterkant">⇥</button>
+      </div>
+      <div class="placard" id="placard" hidden>
+        <div class="pl-title" id="plTitle"></div>
+        <div class="pl-line" id="plFormat"></div>
+        <div class="pl-line" id="plExtent"></div>
       </div>
     </div>
   </section>

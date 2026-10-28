@@ -18,6 +18,7 @@
   --bar: rgba(251, 249, 245, 0.92);
   --paper: #fbfaf6;
   --cover: #1f2a44;
+  --env-muted: rgba(255, 255, 255, .62);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
 }
@@ -44,10 +45,11 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
     radial-gradient(ellipse at 50% 40%, #e7dfd2, #cfc4b2);
 }
 .env-dark .navbar, .env-desk .navbar { color: #f3ede4; }
+.env-studio, .env-linen { --env-muted: rgba(40, 34, 28, .5); }
 
 /* ---------- Topbar ---------- */
 .topbar {
-  display: flex; align-items: center; gap: 12px; justify-content: space-between;
+  display: flex; align-items: center; gap: 12px; justify-content: flex-end;
   padding: 10px 16px; background: var(--bar); border-bottom: 1px solid var(--line);
   backdrop-filter: blur(6px); z-index: 20; flex-wrap: wrap;
 }
@@ -175,21 +177,41 @@ select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); ba
   padding: 6px 12px; border-radius: 20px; font-size: 13px; z-index: 41; white-space: nowrap; pointer-events: none;
 }
 
-/* Kaartje met boekgegevens, als een museumbordje naast het boek */
+/* Boekgegevens rechtsonder: klein en grijs */
 .placard {
-  justify-self: start; max-width: 280px; pointer-events: none;
-  background: rgba(255, 253, 248, .93); color: var(--ink); border-radius: 3px; padding: 9px 12px 10px;
-  box-shadow: 0 1px 1px rgba(0,0,0,.12), 0 6px 14px rgba(0,0,0,.18);
-  font-size: 12px; line-height: 1.45;
+  justify-self: end; text-align: right; white-space: nowrap; pointer-events: none;
+  font-size: 11px; line-height: 1.5; color: var(--env-muted);
 }
 .placard[hidden] { display: block; visibility: hidden; }
-.pl-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
-.pl-line { color: var(--muted); }
-.env-dark .placard { background: rgba(40, 39, 37, .9); color: #eee8dd; }
-.env-dark .pl-line { color: #b6aea2; }
+.pl-title { font-weight: 500; }
+
+/* Pijltjes naast het boek en toetsenbord-hint */
+.side-arrow {
+  position: absolute; top: 50%; z-index: 20; width: 44px; height: 44px; margin-top: -22px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  border-radius: 10px; border: 1px solid rgba(0,0,0,.12); border-bottom-width: 3px;
+  background: rgba(255,255,255,.88); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  transition: transform .1s, opacity .2s;
+}
+.side-arrow[hidden] { display: none; }
+.side-arrow svg { width: 22px; height: 22px; }
+.side-arrow:hover { background: #fff; }
+.side-arrow:active, .side-arrow.pressed { transform: translateY(2px); border-bottom-width: 1px; }
+.side-arrow:disabled { opacity: .3; cursor: default; }
+.side-arrow.prev { left: 14px; }
+.side-arrow.next { right: 14px; }
+.key-hint { justify-self: start; display: flex; white-space: nowrap; align-items: center; gap: 4px; font-size: 11px; color: var(--env-muted); }
+.key-hint span { margin-left: 4px; }
+@media (max-width: 1200px) { .key-hint span { display: none; } }
+kbd {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 5px;
+  font: 600 11px/1 "Inter", system-ui, sans-serif; color: var(--env-muted);
+  border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 5px; opacity: .9;
+}
+@media (hover: none) { .key-hint { visibility: hidden; } }
 
 /* Navigatie */
-.navbar { display: grid; grid-template-columns: minmax(230px, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 18px 14px; z-index: 10; }
+.navbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 18px 14px; z-index: 10; }
 .navbar[hidden] { display: none; }
 .nav-controls { display: flex; align-items: center; gap: 10px; }
 .navbar .nav {
@@ -269,13 +291,15 @@ body.fs .topbar:hover { opacity: 1; }
   .btn span { display: none; }
   .topbar { flex-wrap: nowrap; }
   .controls { flex-wrap: nowrap; flex: none; }
-  .title { flex: 1 1 auto; min-width: 0; max-width: none; }
   .panel { position: fixed; inset: auto 0 0 0; width: auto; height: 62vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.25); z-index: 60; }
   .navbar input[type=range] { width: 30vw; }
   .nav-controls { gap: 8px; }
   .navbar #firstBtn, .navbar #lastBtn { display: none; }
   .pageinfo { min-width: 80px; font-size: 13px; }
   .navbar { display: flex; justify-content: center; }
-  .placard { position: absolute; left: 10px; top: 8px; z-index: 12; padding: 6px 9px; font-size: 11px; max-width: 220px; }
-  .pl-title { font-size: 12px; }
+  .placard { position: absolute; right: 12px; bottom: 64px; z-index: 12; font-size: 10px; max-width: 220px; }
+  .key-hint { display: none; }
+  .side-arrow { width: 36px; height: 36px; margin-top: -18px; }
+  .side-arrow.prev { left: 6px; }
+  .side-arrow.next { right: 6px; }
 }
