@@ -128,6 +128,17 @@
   .row.done .t { color: var(--soft); text-decoration: line-through; }
   .row .acts { display: flex; gap: 4px; flex: none; align-items: flex-start; }
   .none { color: var(--soft); font-size: 13.5px; }
+  .pf-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pf-head .meta { flex: 1 1 100%; margin-top: -4px; }
+  .check { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .check:first-child { border-top: 0; }
+  .check .ic { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; margin-top: 1px; }
+  .check .ic.ok { background: var(--green); } .check .ic.warn { background: var(--amber); } .check .ic.bad { background: #e2483d; } .check .ic.info { background: #9aa6b6; }
+  .check b { font-weight: 600; }
+  .check .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
+  .pf-list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); max-height: 180px; overflow: auto; }
+  .pf-list li { padding: 3px 0; }
+  .pf-list .ppi { display: inline-block; min-width: 58px; font-weight: 600; color: var(--ink); }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px;
     font-size: 13.5px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
   .toast.show { opacity: 1; transform: translateX(-50%); }
@@ -523,6 +534,7 @@ function openDrawer(entry) {
         <div class="meta" data-spine style="margin-top:10px"></div>
       </div>
       <div class="d-sec" data-files></div>
+      <div class="d-sec" data-preflight></div>
       <div class="d-sec">
         <h4>Voor de klant</h4>
         ${sw('allowDownload', b.allowDownload, 'PDF downloaden toestaan')}
@@ -539,6 +551,7 @@ function openDrawer(entry) {
   drawThumb(drawer.querySelector('.mini > div'), b, [62, 72]);
   spineLine(b);
   fillFiles(entry);
+  fillPreflight(entry);
   fillDrawerLists(entry);
 
   drawer.querySelector('[data-act=close]').onclick = closeDrawer;
@@ -625,6 +638,95 @@ function fillFiles(entry) {
     redraw(entry);
     openDrawer(entry);
   };
+}
+
+// ---------- Preflight (alleen voor de beheerder) ----------
+const preflightCache = new Map();
+const pageRanges = (nums) => {
+  const out = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    out.push(j > i ? `${nums[i]}–${nums[j]}` : String(nums[i]));
+    i = j;
+  }
+  return out.join(', ');
+};
+const pagesText = (nums) => (nums.length === 1 ? `pagina ${nums[0]}` : `pagina's ${pageRanges(nums)}`);
+
+function fillPreflight(entry) {
+  const b = entry.meta, el = drawer.querySelector('[data-preflight]');
+  if (!el) return;
+  const targets = [['pdf', 'Binnenwerk', b.pdfVersion || 0]];
+  if (b.coverPdf) targets.push(['coverpdf', 'Omslag', b.coverPdf.version]);
+  el.innerHTML = `<h4>Preflight</h4>
+    <div class="pf-head">
+      <div class="meta">Alleen voor jou: kleurruimte, kleurprofiel, resolutie op 100%, lettertypes en afloop.</div>
+      ${targets.map(([w, label]) => `<button class="btn sm" data-pf="${w}">${label} controleren</button>`).join('')}
+    </div>
+    <div class="progress" data-pfprog><i></i></div>
+    <div data-pfresult></div>`;
+  const result = el.querySelector('[data-pfresult]');
+  for (const [w, label, v] of targets) {
+    const key = `${b.id}:${w}:${v}`;
+    if (preflightCache.has(key)) result.insertAdjacentHTML('beforeend', preflightHtml(label, preflightCache.get(key), b));
+    el.querySelector(`[data-pf="${w}"]`).onclick = async (e) => {
+      const btn = e.currentTarget, bar = el.querySelector('[data-pfprog]');
+      btn.disabled = true;
+      btn.textContent = 'Bezig…';
+      bar.style.display = 'block';
+      bar.firstElementChild.style.width = '0';
+      try {
+        const [{ preflight }, data] = await Promise.all([
+          import('/preflight.js'),
+          fetch(`/api/books/${b.id}/${w}?v=${v}`).then((r) => { if (!r.ok) throw new Error('PDF kon niet worden geladen'); return r.arrayBuffer(); }),
+        ]);
+        const r = await preflight(data, (f) => { bar.firstElementChild.style.width = f * 100 + '%'; });
+        preflightCache.set(key, r);
+        if (drawerEntry === entry) fillPreflight(entry);
+      } catch (err) {
+        result.insertAdjacentHTML('beforeend', `<div class="check"><span class="ic bad">!</span><div>Controle mislukt: ${esc(err.message)}</div></div>`);
+        btn.disabled = false;
+        btn.textContent = `${label} controleren`;
+      } finally {
+        bar.style.display = 'none';
+      }
+    };
+  }
+}
+
+function preflightHtml(label, r, b) {
+  const row = (state, title, sub, extra = '') => `<div class="check"><span class="ic ${state}">${{ ok: '✓', warn: '!', bad: '!', info: 'i' }[state]}</span><div><b>${title}</b>${sub ? `<div class="sub">${sub}</div>` : ''}${extra}</div></div>`;
+  const out = [];
+  // Kleurprofiel
+  const oi = r.intents[0];
+  if (oi) out.push(row(oi.space && oi.space !== 'CMYK' ? 'warn' : 'ok', `Kleurprofiel: ${esc(oi.description || oi.id || oi.info || 'ingesloten')}`,
+    [oi.space && `${oi.space}-profiel`, oi.type === 'GTS_PDFX' ? 'PDF/X output intent' : oi.type, r.pdfx].filter(Boolean).map(esc).join(' · ')));
+  else out.push(row('warn', 'Geen kleurprofiel (output intent)', 'De PDF zegt niet voor welke drukconditie hij gemaakt is. Exporteer bij voorkeur als PDF/X met het profiel van de drukker.'));
+  // Kleurruimte
+  if (r.rgbPages.length) {
+    const imgs = r.rgbImages.length ? `${r.rgbImages.length} RGB-${r.rgbImages.length === 1 ? 'beeld' : 'beelden'}, ` : '';
+    out.push(row('bad', 'RGB gevonden', `${imgs}op ${esc(pagesText(r.rgbPages))}. Zet deze om naar CMYK voor drukwerk.`));
+  } else out.push(row('ok', 'Kleur: alles CMYK of grijs', ''));
+  if (r.spots.length) out.push(row('info', `Steunkleuren: ${esc(r.spots.join(', '))}`, 'Controleer of dit de bedoeling is.'));
+  // Resolutie
+  if (!r.images.length) out.push(row('info', 'Geen beelden gevonden', ''));
+  else {
+    const bad = r.low.filter((i) => i.ppi < 200), warn = r.low.filter((i) => i.ppi >= 200);
+    const list = r.low.length ? `<ul class="pf-list">${r.low.slice(0, 60).map((i) => `<li><span class="ppi">${i.ppi} ppi</span>p. ${i.page} · ${esc(i.cs)} · ${i.w}×${i.h} px op ${Math.round(i.wMm)}×${Math.round(i.hMm)} mm</li>`).join('')}${r.low.length > 60 ? `<li>en nog ${r.low.length - 60}…</li>` : ''}</ul>` : '';
+    if (bad.length) out.push(row('bad', `${bad.length} ${bad.length === 1 ? 'beeld' : 'beelden'} onder 200 ppi`, `Laagste ${r.minPpi} ppi${warn.length ? `, en ${warn.length} tussen 200 en 300 ppi` : ''}. Gemeten op 100% plaatsing.`, list));
+    else if (warn.length) out.push(row('warn', `${warn.length} ${warn.length === 1 ? 'beeld' : 'beelden'} tussen 200 en 300 ppi`, `Laagste ${r.minPpi} ppi, gemeten op 100% plaatsing. Meestal prima, maar niet ideaal voor scherp beeld.`, list));
+    else out.push(row('ok', `Resolutie: alle ${r.images.length} beelden 300 ppi of meer`, `Laagste ${r.minPpi} ppi op 100% plaatsing.`));
+  }
+  // Lettertypes
+  if (r.notEmbedded.length) out.push(row('bad', 'Lettertypes niet ingesloten', r.notEmbedded.map((f) => `${esc(f.name)} (${esc(pagesText(f.pages))})`).join(', ')));
+  else if (r.fonts.length) out.push(row('ok', `Lettertypes: alle ${r.fonts.length} ingesloten`, esc(r.fonts.map((f) => f.name).join(', '))));
+  // Afloop en formaat
+  const bleeds = [...new Set(r.pages.map((p) => p.bleedMm))];
+  if (r.noBleed.length) out.push(row('warn', r.pages.every((p) => !p.hasTrim) ? 'Geen afloop of snijlijn (TrimBox) in de PDF' : 'Te weinig afloop', `Minder dan 3 mm op ${esc(pagesText(r.noBleed))}.`));
+  else out.push(row('ok', `Afloop: ${bleeds.map((v) => String(v).replace('.', ',')).join(' / ')} mm`, ''));
+  out.push(row(r.sizes.length > 1 ? 'warn' : 'info', `Formaat: ${r.sizes.map((x) => x.replace('×', ' × ').replace(/\./g, ',')).join(', ')} mm`, `${r.pages.length} ${r.pages.length === 1 ? 'pagina' : "pagina's"}${r.sizes.length > 1 ? ' · let op: niet alle pagina\'s zijn even groot' : ''}`));
+  return `<div style="margin-top:12px"><div class="sub" style="font-size:12px;font-weight:600;color:var(--soft);margin-bottom:2px">${esc(label)}</div>${out.join('')}</div>`;
 }
 
 function spineLine(b) {
