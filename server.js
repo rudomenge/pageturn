@@ -40,8 +40,8 @@ function loadBook(id) {
   return meta && fs.existsSync(path.join(bookDir(id), 'book.pdf')) ? meta : null;
 }
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt };
 }
 function cleanSettings(body, meta) {
   const out = {};
@@ -54,6 +54,11 @@ function cleanSettings(body, meta) {
   if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
     out.pageSize = { widthMm: Math.round(+ps.widthMm * 10) / 10, heightMm: Math.round(+ps.heightMm * 10) / 10 };
   }
+  if ('paperGsm' in body) {
+    const g = Number(body.paperGsm);
+    out.paperGsm = body.paperGsm === null || body.paperGsm === '' ? null : Number.isFinite(g) && g >= 30 && g <= 500 ? Math.round(g) : meta.paperGsm ?? null;
+  }
+  if (['gloss', 'silk', 'uncoated', 'bulky'].includes(body.paperType)) out.paperType = body.paperType;
   for (const k of ['allowDownload', 'allowComments', 'allowBindingSwitch']) {
     if (k in body) out[k] = body[k] === true || body[k] === 'true' || body[k] === 'on';
   }

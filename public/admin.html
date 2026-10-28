@@ -105,7 +105,8 @@
   .d-sec h4 { margin: 0 0 12px; font-size: 12px; font-weight: 620; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
   .share { display: flex; gap: 6px; }
   .share input { flex: 1; min-width: 0; height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: #f6f9fd; font-size: 13.5px; color: var(--muted); }
-  .form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .form input[type=text], .form .field { width: 100%; min-width: 0; }
   .form label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); font-weight: 520; }
   .form .full { grid-column: 1 / -1; }
   .form input[type=text] { height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 14px; color: var(--ink); }
@@ -196,7 +197,7 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import { renderBook3D, BINDINGS, spineMm } from '/book3d.js';
+import { renderBook3D, BINDINGS, PAPERS, spineMm, paperMmFor } from '/book3d.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -326,7 +327,7 @@ async function drawThumb(el, b, box) {
   const url = coverUrl(b);
   const color = b.coverColor && b.coverColor !== 'auto' ? b.coverColor : url ? await edgeColor(url) : DEFAULT_COVER;
   renderBook3D(el, {
-    coverUrl: url, title: b.title, binding: b.binding, coverColor: color, pages: b.pageCount || 40,
+    coverUrl: url, title: b.title, binding: b.binding, coverColor: color, pages: b.pageCount || 40, paperMm: paperMmFor(b.binding, b.paperGsm, b.paperType),
     widthMm: b.pageSize?.widthMm, heightMm: b.pageSize?.heightMm, boxWidth: box[0], boxHeight: box[1],
   });
 }
@@ -446,7 +447,7 @@ function card(entry) {
   const el = document.createElement('article');
   el.className = 'card';
   el.innerHTML = `
-    <div class="thumb" title="Instellingen en bezoeken"><div class="b3"><div class="spin"></div></div></div>
+    <a class="thumb" href="${link}" target="_blank" title="Boek bekijken"><div class="b3"><div class="spin"></div></div></a>
     <div class="card-body">
       <h3>${esc(b.title)}</h3>
       <div class="meta">${esc(describe(b))}</div>
@@ -462,7 +463,6 @@ function card(entry) {
   if (!needsCover(b) || b.coverMode === 'none') drawThumb(el.querySelector('.b3'), b, [210, 200]);
   el.querySelector('[data-act=copy]').onclick = () => copyLink(link);
   el.querySelector('[data-act=more]').onclick = () => openDrawer(entry);
-  el.querySelector('.thumb').onclick = () => openDrawer(entry);
   return el;
 }
 
@@ -525,6 +525,10 @@ function openDrawer(entry) {
             <option value="outer" ${b.coverMode === 'outer' ? 'selected' : ''}>Eerste en laatste pagina</option>
             <option value="full" ${b.coverMode === 'full' ? 'selected' : ''}>Incl. binnenkant omslag</option>
             <option value="none" ${b.coverMode === 'none' ? 'selected' : ''}>Geen omslag in PDF</option>
+          </select></label>
+          <label class="f">Papier (g/m²) <input type="text" inputmode="numeric" data-k="paperGsm" placeholder="standaard" value="${b.paperGsm || ''}"></label>
+          <label class="f">Papiersoort <select class="field" data-k="paperType">
+            ${Object.entries(PAPERS).map(([v, x]) => `<option value="${v}" ${(b.paperType || 'silk') === v ? 'selected' : ''}>${x.label}</option>`).join('')}
           </select></label>
           <div class="f full" style="font-size:12.5px;color:var(--muted);font-weight:520">Kaftkleur
             <div class="color-row"><span class="switch"><input type="checkbox" data-k="autoColor" ${auto ? 'checked' : ''}><i></i></span>automatisch
@@ -731,7 +735,10 @@ function preflightHtml(label, r, b) {
 
 function spineLine(b) {
   const el = drawer.querySelector('[data-spine]');
-  if (el) el.textContent = `Rugdikte ca. ${spineMm(b.binding, b.pageCount || 40).toFixed(1).replace('.', ',')} mm bij ${b.pageCount || '?'} pagina's`;
+  if (!el) return;
+  const leaf = paperMmFor(b.binding, b.paperGsm, b.paperType);
+  const paper = b.paperGsm ? `${b.paperGsm} g/m² ${PAPERS[b.paperType || 'silk'].label.toLowerCase()}, ${(leaf * 1000).toFixed(0)} µm per blad` : 'standaardpapier; vul de grammage in voor een exacte rug';
+  el.textContent = `Rugdikte ca. ${spineMm(b.binding, b.pageCount || 40, leaf).toFixed(1).replace('.', ',')} mm bij ${b.pageCount || '?'} pagina's · ${paper}`;
 }
 
 function fillDrawerLists(entry) {

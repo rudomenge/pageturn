@@ -14,6 +14,12 @@ const BINDINGS = {
   magazine: { label: 'Magazine', paperMm: 0.075, coverMm: 0.12, overhangMm: 0, glossy: true },
 };
 
+// Volume (cm³/g) per papiersoort, gelijk aan book3d.js: dikte per blad = g/m² × volume / 1000.
+const PAPER_BULK = { gloss: 0.85, silk: 1.0, uncoated: 1.25, bulky: 1.8 };
+const paperMm = () => (state.meta.paperGsm > 0
+  ? (state.meta.paperGsm * (PAPER_BULK[state.meta.paperType] || 1)) / 1000
+  : BINDINGS[state.binding].paperMm);
+
 const state = {
   mode: 'local', // 'server' (deellink) of 'local' (zelf een PDF openen)
   bookId: null,
@@ -511,7 +517,7 @@ function updateDecor() {
     const x = side === 'left' ? rect.left : rect.left + (state.landscape ? pw : pw);
     const px = side === 'left' ? rect.left : state.landscape ? rect.left + pw : rect.left + pw;
     const closed = state.pages[pageIdx].role === 'front' || state.pages[pageIdx].role === 'back';
-    const paperPx = sheets[side] * b.paperMm * pxPerMm;
+    const paperPx = sheets[side] * paperMm() * pxPerMm;
     place(block, px, rect.top, pw, h);
     void x;
 
@@ -599,9 +605,9 @@ function updatePlacard() {
   const orient = Math.abs(w - h) < 2 ? 'vierkant' : w > h ? 'liggend' : 'staand';
   $('plTitle').textContent = state.meta.title || '';
   $('plFormat').textContent = `Formaat ${cm(w)} × ${cm(h)} cm${std ? ` (${std[0]})` : ''}, ${orient}`;
-  const spineMm = (state.innerCount / 2) * b.paperMm + 2 * b.coverMm + (state.binding === 'hardcover' ? 1.5 : 0);
+  const spineMm = (state.innerCount / 2) * paperMm() + 2 * b.coverMm + (state.binding === 'hardcover' ? 1.5 : 0);
   const spine = state.binding === 'magazine' ? 'geniet' : `rug ca. ${spineMm < 10 ? spineMm.toFixed(1).replace('.', ',') : Math.round(spineMm)} mm`;
-  $('plExtent').textContent = `${state.pdfPageCount} pagina's · ${b.label} · ${spine}`;
+  $('plExtent').textContent = `${state.pdfPageCount} pagina's · ${b.label} · ${spine}${state.meta.paperGsm ? ` · ${state.meta.paperGsm} g/m²` : ''}`;
   $('placard').hidden = false;
 }
 

@@ -8,9 +8,23 @@ export const BINDINGS = {
   magazine: { label: 'Magazine', paperMm: 0.075, coverMm: 0.12, overhangMm: 0, glossy: true },
 };
 
-export function spineMm(binding, pages) {
+// Volume (cm³/g) per papiersoort: dikte van één vel in mm = g/m² × volume / 1000.
+export const PAPERS = {
+  gloss: { label: 'Gestreken glans (mc)', bulk: 0.85 },
+  silk: { label: 'Gestreken mat / silk', bulk: 1.0 },
+  uncoated: { label: 'Ongestreken (offset)', bulk: 1.25 },
+  bulky: { label: 'Romandruk / volumineus', bulk: 1.8 },
+};
+
+// Dikte van één blad (2 pagina's) in mm: uit grammage en papiersoort, anders een standaard per uitvoering.
+export function paperMmFor(binding, paperGsm, paperType) {
+  if (paperGsm > 0) return (paperGsm * (PAPERS[paperType] || PAPERS.silk).bulk) / 1000;
+  return (BINDINGS[binding] || BINDINGS.hardcover).paperMm;
+}
+
+export function spineMm(binding, pages, paperMm) {
   const b = BINDINGS[binding] || BINDINGS.hardcover;
-  return Math.ceil(pages / 2) * b.paperMm + 2 * b.coverMm + (binding === 'hardcover' ? 1.5 : 0);
+  return Math.ceil(pages / 2) * (paperMm || b.paperMm) + 2 * b.coverMm + (binding === 'hardcover' ? 1.5 : 0);
 }
 
 const CSS = `
@@ -55,7 +69,7 @@ function shade(hex, amt) {
 
 /**
  * Tekent een 3D-boek in `el`.
- * opts: { coverUrl, title, widthMm, heightMm, pages, binding, coverColor, boxWidth, boxHeight }
+ * opts: { coverUrl, title, widthMm, heightMm, pages, binding, coverColor, paperMm, boxWidth, boxHeight }
  */
 export function renderBook3D(el, opts) {
   injectCss();
@@ -63,7 +77,7 @@ export function renderBook3D(el, opts) {
   const b = BINDINGS[binding];
   const wMm = opts.widthMm || 210, hMm = opts.heightMm || 297;
   const ovMm = b.overhangMm;
-  const tMm = spineMm(binding, opts.pages || 40);
+  const tMm = spineMm(binding, opts.pages || 40, opts.paperMm);
   // Kaft is bij hardcover groter dan het papierblok (overstek aan boven-, onder- en voorkant).
   const coverW = wMm + ovMm, coverH = hMm + 2 * ovMm;
   const boxW = opts.boxWidth || 150, boxH = opts.boxHeight || 190;
