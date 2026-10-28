@@ -30,13 +30,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
 /* ---------- Omgevingen ---------- */
-.env-desk .stage {
-  background:
-    radial-gradient(ellipse at 50% 45%, rgba(255, 236, 205, 0.35), transparent 65%),
-    repeating-linear-gradient(92deg, rgba(60, 35, 15, 0.10) 0 2px, transparent 2px 9px),
-    repeating-linear-gradient(88deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 23px),
-    linear-gradient(180deg, #9a7551, #7a5a3d 70%, #694c33);
-}
+.env-grey .stage { background: radial-gradient(ellipse at 50% 40%, #eceef0, #d3d6da 60%, #c1c5ca); }
 .env-studio .stage { background:
   radial-gradient(900px 560px at 8% -10%, rgba(132, 176, 255, .38), transparent 60%),
   radial-gradient(760px 520px at 96% 4%, rgba(255, 170, 210, .30), transparent 62%),
@@ -50,6 +44,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 }
 .env-studio { --env-muted: rgba(13, 27, 46, .45); --env-ink: #0d1b2e; }
 .env-linen { --env-muted: rgba(40, 34, 28, .5); --env-ink: #2a2520; }
+.env-grey { --env-muted: rgba(30, 36, 44, .5); --env-ink: #1e242c; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; font-weight: 550;
@@ -93,7 +88,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .swatches i { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); box-shadow: inset 0 1px 2px rgba(0,0,0,.1); }
 .swatches [data-env=studio] i { background: linear-gradient(135deg, #dce8ff, #f1f7fe 55%, #fbe6f0); }
 .swatches [data-env=linen] i { background: #d9cfbe; }
-.swatches [data-env=desk] i { background: linear-gradient(160deg, #a07a55, #6f5039); }
+.swatches [data-env=grey] i { background: linear-gradient(160deg, #e3e5e8, #bfc3c8); }
 .swatches [data-env=dark] i { background: #262524; }
 .swatches button.on i { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
 .menu-group button[data-binding]::before {
@@ -152,7 +147,12 @@ select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); ba
 .b-magazine  { --gutter-a: .16; --gutter-w: 9%; }
 
 /* Papierblok en kaft */
-.block, .board { position: absolute; pointer-events: none; }
+.block, .board, .spine-mid { position: absolute; pointer-events: none; }
+.spine-mid { display: none; border-radius: 3px; }
+/* Terug naar het overzicht: alleen zichtbaar in de browser van de eigenaar. */
+.home-fab { position: absolute; top: 14px; left: 14px; z-index: 46; width: auto; padding: 0 14px 0 10px; gap: 6px; border-radius: 999px;
+  font-size: 13px; font-weight: 550; text-decoration: none; }
+@media (max-width: 640px) { .home-fab { top: 10px; left: 10px; } .home-fab span { display: none; } .home-fab { padding: 0; width: 40px; } }
 .block { background: var(--paper); }
 .board {
   background-color: var(--cover);

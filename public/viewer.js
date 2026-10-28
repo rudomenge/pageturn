@@ -183,6 +183,7 @@ async function openPdf(src) {
   $('navbar').hidden = false;
   $('sidePrev').hidden = $('sideNext').hidden = false;
   $('commentsBtn').hidden = !state.meta.allowComments;
+  $('homeBtn').hidden = !(state.mode === 'server' && isOwnerBrowser() && !new URLSearchParams(location.search).has('voorbeeld'));
   $('downloadBtn').hidden = !(state.meta.allowDownload && state.downloadUrl) || !!window.BLADERBOEK_DEMO;
   $('downloadBtn').href = state.downloadUrl || '#';
   if (state.downloadName) $('downloadBtn').download = state.downloadName;
@@ -540,6 +541,21 @@ function updateDecor() {
       block.style.boxShadow = edgeShadows(layers, dir, true);
     }
   }
+
+  // Open hardcover: tussen de borden loopt de rug, zichtbaar boven en onder het papier.
+  const sm = $('spineMid');
+  if (state.binding === 'hardcover' && state.landscape && v.left != null && v.right != null) {
+    const spinePx = Math.max(6, Math.min(60, (state.innerCount / 2) * paperMm() * pxPerMm + 2 * boardPx));
+    const joint = Math.max(3, 4 * pxPerMm);
+    const w = spinePx + 2 * joint;
+    const depth = (sheets.left + sheets.right) / 2 * paperMm() * pxPerMm;
+    const dark = shade(state.coverColor, -0.45), mid = shade(state.coverColor, -0.15), light = shade(state.coverColor, 0.12);
+    const j = (joint / w) * 100;
+    sm.style.background = `linear-gradient(90deg, ${mid} 0, ${dark} ${j * 0.6}%, ${mid} ${j}%, ${light} 50%, ${mid} ${100 - j}%, ${dark} ${100 - j * 0.6}%, ${mid} 100%)`;
+    // De rug ligt iets hoger dan de borden (hij buigt om het papierblok heen) en blijft daardoor boven en onder zichtbaar.
+    place(sm, rect.left + pw - w / 2, rect.top - ov * 1.3 + Math.min(depth, ov) * 0.3, w, h + ov * 2.6);
+    sm.style.display = 'block';
+  } else sm.style.display = 'none';
 
   // Nietjes in het middelste katern van een magazine.
   const staples = $('staples');
@@ -974,7 +990,7 @@ function pressFeedback(id) {
 }
 
 function setEnv(env) {
-  document.body.classList.remove('env-desk', 'env-studio', 'env-dark', 'env-linen');
+  document.body.classList.remove('env-grey', 'env-studio', 'env-dark', 'env-linen');
   document.body.classList.add('env-' + env);
   document.querySelectorAll('#envGroup button').forEach((b) => b.classList.toggle('on', b.dataset.env === env));
 }
