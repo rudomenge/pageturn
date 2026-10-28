@@ -1,5 +1,5 @@
 # Cloudflare Worker voor Bladerboek. Zie README voor de stappen in het dashboard.
-name = "bladerboek"
+name = "pageturn"
 main = "worker/index.js"
 compatibility_date = "2025-09-01"
 
