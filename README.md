@@ -11,22 +11,29 @@ Een webtool om je boeken als realistisch bladerboek aan klanten te laten zien.
 - PDF downloaden (per boek aan of uit te zetten).
 - Keuze van omgeving: houten tafel, lichte studio, donker of linnen.
 
-## Lokaal starten
+## Online zetten op Cloudflare (aanbevolen)
+
+De tool draait als Cloudflare Worker. PDF's en opmerkingen staan in één R2-bucket. Bij normaal gebruik valt dat binnen het gratis tegoed (10 GB opslag, gratis downloads). Een PDF mag maximaal 95 MB zijn.
+
+1. **R2 aanzetten.** Ga in het [Cloudflare-dashboard](https://dash.cloudflare.com) naar *Storage & databases → R2* en zet R2 aan. Cloudflare vraagt een betaalmethode, ook voor het gratis deel.
+2. **Bucket maken.** Klik op *Create bucket* en noem hem precies `bladerboek-boeken`. De rest laat je staan.
+3. **Worker koppelen aan GitHub.** Ga naar *Workers & Pages → Create → Import a repository*. Koppel GitHub, kies `rudomenge/pageturn` en laat de voorgestelde instellingen staan (deploycommando `npx wrangler deploy`). Klik op *Deploy*.
+4. **Wachtwoord instellen.** Open de Worker *bladerboek* → *Settings → Variables and Secrets → Add*. Kies type *Secret*, naam `ADMIN_PASSWORD` en vul je wachtwoord in. Sla op met *Deploy*.
+5. **Klaar.** Open het adres dat Cloudflare toont (`https://bladerboek.<jouw-naam>.workers.dev`). Log in met een willekeurige gebruikersnaam en je wachtwoord, en upload je eerste boek.
+6. **Eigen domein (optioneel).** Bij *Settings → Domains & Routes → Add → Custom domain* kun je bijvoorbeeld `boeken.jouwdomein.nl` koppelen, als dat domein bij Cloudflare staat.
+
+Elke wijziging die op `main` in GitHub komt, zet Cloudflare daarna automatisch online.
+
+Lokaal testen met Cloudflare: zet `ADMIN_PASSWORD=...` in een bestand `.dev.vars` en start `npx wrangler dev`.
+
+## Andere hosting (Node.js)
 
 ```bash
 npm install
 ADMIN_PASSWORD=kies-een-wachtwoord npm start
 ```
 
-Open daarna http://localhost:3000 (beheer, inloggen met een willekeurige gebruikersnaam en je wachtwoord).
-
-`public/viewer.html` werkt ook zonder deellink: open hem en sleep er een PDF in. Opmerkingen blijven dan alleen in je eigen browser.
-
-## Online zetten
-
-Elke host die Node.js 18+ draait en een blijvende map heeft voor de bestanden werkt, bijvoorbeeld een VPS, Render, Railway of Fly.io. Er zit een `Dockerfile` bij.
-
-Instellingen (omgevingsvariabelen):
+Open daarna http://localhost:3000 (beheer, inloggen met een willekeurige gebruikersnaam en je wachtwoord). Elke host met Node.js 18+ en een blijvende map werkt, bijvoorbeeld een VPS, Render of Railway. Er zit een `Dockerfile` bij.
 
 | Variabele | Betekenis |
 | --- | --- |
@@ -34,11 +41,12 @@ Instellingen (omgevingsvariabelen):
 | `DATA_DIR` | Map waar PDF's en opmerkingen worden bewaard (standaard `./data`, in Docker `/data`). Moet blijvend zijn. |
 | `PORT` | Poort (standaard 3000). |
 
-Zet de site achter HTTPS (bij de meeste hosts automatisch).
+`public/viewer.html` werkt ook zonder server: open hem en sleep er een PDF in. Opmerkingen blijven dan alleen in je eigen browser.
 
 ## Opbouw
 
-- `server.js`: Express-server met beheer-API (wachtwoord), deellinks en opmerkingen. Opslag per boek in `DATA_DIR/books/<id>/` (`book.pdf`, `meta.json`, `comments.json`).
+- `worker/index.js` + `wrangler.toml`: de Cloudflare-versie. Opslag in R2 onder `books/<id>/` (`book.pdf`, `meta.json`, `comments/…`).
+- `server.js`: dezelfde API als Node/Express-server, met opslag in `DATA_DIR/books/<id>/`.
 - `public/viewer.*`: de bladerviewer (pdf.js voor het renderen, StPageFlip voor de pageturn, eigen laag voor kaft, papierblok, rug, nietjes en spelden).
 - `public/admin.html`: beheerpagina.
 - `public/vendor/`: meegeleverde bibliotheken (pdf.js 4.10, StPageFlip 2.0.7, pdf-lib 1.17), zodat er geen externe CDN nodig is.

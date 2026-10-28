@@ -1,7 +1,6 @@
 // Bladerboek: kleine server voor het delen van PDF-boeken met klanten.
 // Opslag is bewust simpel: per boek een map in DATA_DIR met book.pdf, meta.json en comments.json.
 const express = require('express');
-const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -65,24 +64,8 @@ function requireAdmin(req, res, next) {
   res.status(401).send('Inloggen vereist');
 }
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      req.bookId = crypto.randomBytes(8).toString('hex');
-      const dir = bookDir(req.bookId);
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) => cb(null, 'book.pdf'),
-  }),
-  limits: { fileSize: 300 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname)),
-});
-
-app.get('/health', (req, res) => res.send('ok'));
-
 // ---- Beheer ----
-app.get(['/', '/admin'], requireAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get(['/', '/admin', '/admin.html'], requireAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 app.get('/api/admin/books', requireAdmin, (req, res) => {
   const root = path.join(DATA_DIR, 'books');
@@ -111,20 +94,43 @@ async function inspectPdf(file) {
   return { pageCount: doc.getPageCount(), trim: sane && hasBleed ? inset : null };
 }
 
-app.post('/api/admin/books', requireAdmin, upload.single('pdf'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Geen PDF ontvangen' });
+// Upload: het PDF-bestand is de body, de instellingen staan in de querystring (zelfde API als de Cloudflare-versie).
+app.put('/api/admin/books', requireAdmin, async (req, res) => {
+  const id = crypto.randomBytes(8).toString('hex');
+  const dir = bookDir(id);
+  const file = path.join(dir, 'book.pdf');
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(file);
+      let size = 0;
+      req.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > 300 * 1024 * 1024) { req.destroy(); reject(new Error('Bestand te groot')); }
+      });
+      req.pipe(out);
+      out.on('finish', resolve);
+      out.on('error', reject);
+      req.on('error', reject);
+    });
+  } catch (e) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return res.status(400).json({ error: e.message });
+  }
   let info;
   try {
-    info = await inspectPdf(req.file.path);
+    info = await inspectPdf(file);
   } catch (e) {
-    fs.rmSync(bookDir(req.bookId), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
     return res.status(400).json({ error: 'Dit bestand is geen leesbare PDF' });
   }
+  const q = req.query;
+  const fileName = String(q.fileName || 'boek.pdf').slice(0, 200);
   const meta = {
-    id: req.bookId,
-    title: path.basename(req.file.originalname, path.extname(req.file.originalname)),
-    fileName: req.file.originalname,
-    size: req.file.size,
+    id,
+    title: fileName.replace(/\.pdf$/i, ''),
+    fileName,
+    size: fs.statSync(file).size,
     pageCount: info.pageCount,
     trim: info.trim,
     binding: 'hardcover',
@@ -135,9 +141,9 @@ app.post('/api/admin/books', requireAdmin, upload.single('pdf'), async (req, res
     allowBindingSwitch: true,
     createdAt: new Date().toISOString(),
   };
-  Object.assign(meta, cleanSettings(req.body || {}, meta));
-  writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
-  writeJson(path.join(bookDir(meta.id), 'comments.json'), []);
+  Object.assign(meta, cleanSettings(q, meta));
+  writeJson(path.join(dir, 'meta.json'), meta);
+  writeJson(path.join(dir, 'comments.json'), []);
   res.json(meta);
 });
 

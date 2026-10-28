@@ -54,8 +54,9 @@
   <div class="upload" id="upload">
     <div class="grow">
       <strong>Nieuw boek uploaden</strong>
-      <span>Sleep een PDF hierheen of kies een bestand. Afloop (TrimBox) wordt automatisch weggesneden.</span>
+      <span>Sleep een PDF (tot 95 MB) hierheen of kies een bestand. De afloop wordt automatisch weggesneden.</span>
       <div class="progress" id="progress"><i></i></div>
+      <div class="sub" id="status" role="status"></div>
     </div>
     <select id="newBinding">
       <option value="hardcover">Hardcover</option>
@@ -82,24 +83,59 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-function upload(file) {
+const MAX_UPLOAD_MB = 95; // Cloudflare accepteert maximaal 100 MB per verzoek
+
+// Paginatal en afloop (TrimBox) lezen we hier in de browser, zodat de server niets hoeft te parsen.
+async function inspectPdf(file) {
+  try {
+    const { PDFDocument } = await import('/vendor/pdf-lib.esm.min.js');
+    const doc = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false, ignoreEncryption: true });
+    const page = doc.getPage(0);
+    const crop = page.getCropBox(), trim = page.getTrimBox();
+    const inset = {
+      left: trim.x - crop.x,
+      bottom: trim.y - crop.y,
+      right: crop.x + crop.width - (trim.x + trim.width),
+      top: crop.y + crop.height - (trim.y + trim.height),
+    };
+    const vals = Object.values(inset);
+    const ok = vals.every((v) => v >= 0 && v < Math.min(crop.width, crop.height) / 4) && vals.reduce((a, b) => a + b, 0) > 0.5;
+    return { pageCount: doc.getPageCount(), trim: ok ? inset : null };
+  } catch {
+    return null;
+  }
+}
+
+function setStatus(text) { $('status').textContent = text; }
+
+async function upload(file) {
   if (!file) return;
-  const fd = new FormData();
-  // Velden vóór het bestand, zodat de server ze al kent tijdens het opslaan.
-  fd.append('binding', $('newBinding').value);
-  fd.append('coverMode', $('newCover').value);
-  fd.append('pdf', file);
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return setStatus('Kies een PDF-bestand.');
+  if (file.size > MAX_UPLOAD_MB * 1048576) return setStatus(`Dit bestand is ${(file.size / 1048576).toFixed(0)} MB. Het maximum is ${MAX_UPLOAD_MB} MB; exporteer de PDF eventueel met iets lagere beeldkwaliteit.`);
+  setStatus('PDF wordt gecontroleerd…');
+  const info = await inspectPdf(file);
+  if (!info) return setStatus('Dit bestand kon niet als PDF worden gelezen.');
+  const q = new URLSearchParams({
+    fileName: file.name,
+    binding: $('newBinding').value,
+    coverMode: $('newCover').value,
+    pageCount: String(info.pageCount),
+  });
+  if (info.trim) q.set('trim', JSON.stringify(info.trim));
   const xhr = new XMLHttpRequest();
   const bar = $('progress');
   bar.style.display = 'block';
+  setStatus('Uploaden…');
   xhr.upload.onprogress = (e) => { bar.firstElementChild.style.width = (e.loaded / e.total) * 100 + '%'; };
   xhr.onload = () => {
     bar.style.display = 'none';
-    if (xhr.status >= 300) alert('Uploaden mislukt: ' + xhr.responseText);
+    setStatus(xhr.status >= 300 ? 'Uploaden mislukt: ' + xhr.responseText : `"${file.name}" staat klaar. Kopieer hieronder de link voor je klant.`);
     load();
   };
-  xhr.open('POST', '/api/admin/books');
-  xhr.send(fd);
+  xhr.onerror = () => { bar.style.display = 'none'; setStatus('Uploaden mislukt. Controleer je verbinding en probeer het opnieuw.'); };
+  xhr.open('PUT', '/api/admin/books?' + q);
+  xhr.setRequestHeader('Content-Type', 'application/pdf');
+  xhr.send(file);
 }
 
 $('file').addEventListener('change', (e) => upload(e.target.files[0]));
@@ -148,7 +184,7 @@ async function bookCard(b) {
       <label><input type="checkbox" data-k="allowComments" ${b.allowComments ? 'checked' : ''}> Opmerkingen toestaan</label>
       <label><input type="checkbox" data-k="allowBindingSwitch" ${b.allowBindingSwitch ? 'checked' : ''}> Klant mag uitvoering wisselen</label>
     </div>
-    <details ${b.openCount ? 'open' : ''}><summary>Opmerkingen (${b.commentCount})${b.openCount ? `<span class="badge">${b.openCount} open</span>` : ''}</summary><div class="clist"></div></details>`;
+    <details><summary>Opmerkingen</summary><div class="clist"></div></details>`;
 
   el.querySelector('[data-act=copy]').onclick = async (e) => {
     await navigator.clipboard.writeText(link).catch(() => el.querySelector('.share input').select());
@@ -175,6 +211,9 @@ async function bookCard(b) {
 
   const comments = await api(`/api/books/${b.id}/comments`);
   const list = el.querySelector('.clist');
+  const open = comments.filter((c) => !c.resolved).length;
+  el.querySelector('summary').innerHTML = `Opmerkingen (${comments.length})${open ? `<span class="badge">${open} open</span>` : ''}`;
+  if (open) el.querySelector('details').open = true;
   if (!comments.length) list.innerHTML = '<div class="sub" style="padding:8px 0">Nog geen opmerkingen.</div>';
   comments.forEach((c, i) => {
     const row = document.createElement('div');
