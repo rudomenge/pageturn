@@ -35,7 +35,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   radial-gradient(900px 560px at 8% -10%, rgba(132, 176, 255, .38), transparent 60%),
   radial-gradient(760px 520px at 96% 4%, rgba(255, 170, 210, .30), transparent 62%),
   radial-gradient(900px 600px at 55% 115%, rgba(170, 220, 255, .45), transparent 60%), #f1f7fe; }
-.env-dark .stage { background: radial-gradient(ellipse at 50% 40%, #3a3836, #1d1c1b 70%, #121211); }
+.env-dark .stage { background: radial-gradient(ellipse at 50% 40%, #4a4e54, #393c41 65%, #2f3236); }
 .env-linen .stage {
   background:
     repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.035) 0 1px, transparent 1px 3px),
@@ -150,7 +150,7 @@ select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); ba
 .block, .board, .spine-mid { position: absolute; pointer-events: none; }
 .spine-mid { display: none; border-radius: 3px; }
 .spine-mid::before, .spine-mid::after { content: ""; position: absolute; left: var(--joint); right: var(--joint); height: var(--hb); border-radius: 1.5px;
-  background: repeating-linear-gradient(90deg, var(--headband, #fff) 0 2px, color-mix(in srgb, var(--headband, #fff) 70%, #000) 2px 3px);
+  background: repeating-linear-gradient(90deg, var(--headband, #fff) 0 2px, var(--headband2, #b3b3b3) 2px 3.5px);
   box-shadow: 0 0 0 .5px rgba(0,0,0,.18), inset 0 -1px 1px rgba(0,0,0,.15); }
 .spine-mid::before { top: var(--hb-top); }
 .spine-mid::after { bottom: var(--hb-top); }
@@ -174,6 +174,10 @@ select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); ba
 .ed-field[hidden] { display: none; }
 .ed-field select, .ed-field input { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; color: var(--ink); width: 100%; min-width: 0; }
 .ed-row { display: flex; }
+.ed-hb { display: flex; align-items: center; gap: 8px; }
+.ed-hb select { flex: 1; }
+.ed-hb i { flex: none; width: 30px; height: 14px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.ed-hb input[type=color] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .ed-color { flex-direction: row; align-items: center; justify-content: space-between; }
 .ed-field input[type=color] { width: 44px; height: 30px; padding: 2px; flex: none; }
 .ed-file { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 13.5px; }
@@ -227,6 +231,7 @@ select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); ba
   font-size: 11px; line-height: 1.5; color: var(--env-muted);
 }
 .placard[hidden] { display: block; visibility: hidden; }
+.pl-line[hidden] { display: none; }
 .pl-title { font-weight: 500; }
 
 /* Pijltjes naast het boek en toetsenbord-hint */
@@ -253,7 +258,7 @@ kbd {
 @media (hover: none) { .key-hint { visibility: hidden; } }
 
 /* Navigatie */
-.navbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 18px 14px; z-index: 10; }
+.navbar { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 18px 14px; z-index: 60; }
 .navbar[hidden] { display: none; }
 .nav-controls { display: flex; align-items: center; gap: 10px; }
 .navbar { color: var(--env-ink); }
@@ -359,7 +364,7 @@ kbd {
   .navbar #firstBtn, .navbar #lastBtn { display: none; }
   .pageinfo { min-width: 80px; font-size: 13px; }
   .navbar { display: flex; justify-content: center; }
-  .placard { position: absolute; right: 12px; bottom: 64px; z-index: 12; font-size: 10px; max-width: 220px; }
+  .placard { position: absolute; right: 12px; bottom: 64px; z-index: 61; font-size: 10px; max-width: 220px; }
   .key-hint { display: none; }
   .side-arrow { width: 36px; height: 36px; margin-top: -18px; }
   .side-arrow.prev { left: 6px; }

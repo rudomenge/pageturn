@@ -40,9 +40,17 @@ function loadBook(id) {
   return meta && fs.existsSync(path.join(bookDir(id), 'book.pdf')) ? meta : null;
 }
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, headband, fileName, colorProfile, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, headband, fileName, colorProfile, createdAt };
 }
+// Kapitaalband: { code, name, colors: [kleur] of [kleur, kleur] voor gestreept }.
+function cleanHeadband(h) {
+  if (!h || typeof h !== 'object') return null;
+  const colors = (Array.isArray(h.colors) ? h.colors : []).filter((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)).slice(0, 2);
+  if (!colors.length) return null;
+  return { code: String(h.code || '').trim().slice(0, 30), name: String(h.name || '').trim().slice(0, 60), colors };
+}
+
 function cleanSettings(body, meta) {
   const out = {};
   if (typeof body.title === 'string') out.title = body.title.trim().slice(0, 200) || meta.title;
@@ -50,6 +58,9 @@ function cleanSettings(body, meta) {
   if (typeof body.coverColor === 'string' && /^(#[0-9a-f]{6}|auto)$/i.test(body.coverColor)) out.coverColor = body.coverColor;
   if (COVER_MODES.includes(body.coverMode)) out.coverMode = body.coverMode;
   if (typeof body.headbandColor === 'string' && /^#[0-9a-f]{6}$/i.test(body.headbandColor)) out.headbandColor = body.headbandColor;
+  if ('headband' in body) out.headband = cleanHeadband(body.headband);
+  if (typeof body.fileName === 'string' && body.fileName.trim()) out.fileName = body.fileName.trim().replace(/[\\/:*?"<>|]+/g, '-').slice(0, 196).replace(/(\.pdf)?$/i, '.pdf');
+  if (typeof body.colorProfile === 'string') out.colorProfile = body.colorProfile.trim().slice(0, 120);
   let ps = body.pageSize;
   if (typeof ps === 'string') ps = readJsonString(ps);
   if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
@@ -190,8 +201,9 @@ app.put('/api/admin/books/:id/:which(pdf|coverpdf|endpaperpdf)', requireAdmin, a
   if (field) meta[field] = { fileName, pageCount: info.pageCount, trim: info.trim, size, version: Date.now() };
   else {
     Object.assign(meta, { fileName, pageCount: info.pageCount, trim: info.trim, size, pdfVersion: Date.now() });
-    const ps = cleanSettings({ pageSize: req.query.pageSize }, meta).pageSize;
-    if (ps) meta.pageSize = ps;
+    const extra = cleanSettings({ pageSize: req.query.pageSize, colorProfile: req.query.colorProfile ?? '' }, meta);
+    if (extra.pageSize) meta.pageSize = extra.pageSize;
+    meta.colorProfile = extra.colorProfile;
   }
   writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
   res.json(meta);
@@ -212,6 +224,16 @@ app.get('/api/books/:id/:which(coverpdf|endpaperpdf)', (req, res) => {
   if (!meta || !meta[field]) return res.status(404).end();
   res.set('Content-Type', 'application/pdf');
   res.sendFile(path.join(bookDir(meta.id), name));
+});
+
+// Kleurenlijst van kapitaalbanden (gedeeld door alle boeken).
+const HEADBANDS_FILE = path.join(DATA_DIR, 'headbands.json');
+app.get('/api/admin/headbands', requireAdmin, (req, res) => res.json(readJson(HEADBANDS_FILE, null)));
+app.put('/api/admin/headbands', requireAdmin, (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Ongeldige lijst' });
+  const clean = req.body.map(cleanHeadband).filter(Boolean).slice(0, 300);
+  writeJson(HEADBANDS_FILE, clean);
+  res.json(clean);
 });
 
 app.patch('/api/admin/books/:id', requireAdmin, (req, res) => {
@@ -263,7 +285,7 @@ app.get('/api/books/:id/pdf', (req, res) => {
   if (!meta) return res.status(404).end();
   const download = req.query.download === '1';
   if (download && !meta.allowDownload) return res.status(403).send('Downloaden staat uit voor dit boek.');
-  const name = (meta.title || 'boek').replace(/[^\w\- .]/g, '_') + '.pdf';
+  const name = (meta.fileName || meta.title || 'boek').replace(/\.pdf$/i, '').replace(/[^\w\- .]/g, '_') + '.pdf';
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${name}"`);
   res.sendFile(path.join(bookDir(meta.id), 'book.pdf'));

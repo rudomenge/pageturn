@@ -140,6 +140,23 @@
   .pf-list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); max-height: 180px; overflow: auto; }
   .pf-list li { padding: 3px 0; }
   .pf-list .ppi { display: inline-block; min-width: 58px; font-weight: 600; color: var(--ink); }
+  .palette { margin: -40px 0 80px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, .7); padding: 0 20px; }
+  .palette summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 18px 0; cursor: pointer; font-weight: 620; font-size: 15px; list-style: none; }
+  .palette summary::-webkit-details-marker { display: none; }
+  .palette summary .meta { font-weight: 450; }
+  .pal-list { display: grid; gap: 6px; }
+  .pal-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pal-row i { width: 34px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); flex: none; }
+  .pal-row input[type=text] { height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13.5px; }
+  .pal-row input[data-f=code] { width: 110px; } .pal-row input[data-f=name] { width: 180px; }
+  .pal-row input[type=color] { width: 38px; height: 30px; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: #fff; }
+  .pal-row input[data-off] { opacity: .35; }
+  .pal-two { font-size: 13px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
+  .pal-actions { display: flex; gap: 8px; padding: 14px 0 20px; }
+  .hb-pick { display: flex; align-items: center; gap: 8px; }
+  .hb-pick i { flex: none; width: 34px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); }
+  .hb-pick .field { flex: 1; }
+  .hb-pick input[type=color] { width: 38px; height: 30px; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: #fff; flex: none; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px;
     font-size: 13.5px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
   .toast.show { opacity: 1; transform: translateX(-50%); }
@@ -190,6 +207,12 @@
 
   <div class="section-head"><h2>Boeken</h2><span id="count"></span></div>
   <div class="grid" id="books"></div>
+
+  <details class="palette" id="palette">
+    <summary><span>Kapitaalbanden</span><span class="meta">De kleuren die je per hardcover kunt kiezen, met de code van je leverancier.</span></summary>
+    <div class="pal-list" id="palList"></div>
+    <div class="pal-actions"><button class="btn sm" id="palAdd">Kleur toevoegen</button><button class="btn sm ghost" id="palReset">Standaardlijst terugzetten</button></div>
+  </details>
 </div>
 
 <div class="scrim" id="scrim"></div>
@@ -198,6 +221,7 @@
 
 <script type="module">
 import { renderBook3D, BINDINGS, PAPERS, spineMm, paperMmFor } from '/book3d.js';
+import { DEFAULT_HEADBANDS, headbandOf, headbandLabel } from '/headbands.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -241,7 +265,8 @@ async function inspectPdf(buf) {
     };
     const vals = Object.values(inset);
     const ok = vals.every((v) => v >= 0 && v < Math.min(crop.width, crop.height) / 4) && vals.reduce((a, b) => a + b, 0) > 0.5;
-    return { pageCount: doc.getPageCount(), trim: ok ? inset : null };
+    const { colorProfileOf } = await import('/preflight.js');
+    return { pageCount: doc.getPageCount(), trim: ok ? inset : null, colorProfile: colorProfileOf(doc) };
   } catch {
     return null;
   }
@@ -375,6 +400,7 @@ async function upload(file) {
     const q = new URLSearchParams({ fileName: file.name, binding: $('newBinding').value, coverMode, pageCount: String(info.pageCount) });
     if (info.trim) q.set('trim', JSON.stringify(info.trim));
     if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
+    q.set('colorProfile', info.colorProfile || '');
     bar.style.display = 'block';
     bar.firstElementChild.style.width = '0';
     setStatus('Uploaden…');
@@ -416,7 +442,60 @@ async function load() {
   }
   // Oudere boeken krijgen hun voorkant en formaat alsnog, één voor één.
   for (const entry of books.values()) if (needsCover(entry.meta)) await refreshCover(entry).catch(() => redraw(entry));
+  // Kleurprofiel van oudere boeken alsnog uitlezen.
+  for (const entry of books.values()) if (entry.meta.colorProfile === undefined) await readColorProfile(entry).catch(() => {});
 }
+
+async function readColorProfile(entry) {
+  const b = entry.meta;
+  const res = await fetch(`/api/books/${b.id}/pdf${b.pdfVersion ? `?v=${b.pdfVersion}` : ''}`);
+  if (!res.ok) return;
+  const [{ PDFDocument }, { colorProfileOf }] = await Promise.all([import('/vendor/pdf-lib.esm.min.js'), import('/preflight.js')]);
+  const doc = await PDFDocument.load(await res.arrayBuffer(), { updateMetadata: false, ignoreEncryption: true });
+  entry.meta = await api(`/api/admin/books/${b.id}`, { method: 'PATCH', body: JSON.stringify({ colorProfile: colorProfileOf(doc) }) });
+}
+
+// ---------- Kapitaalbanden (kleurenlijst) ----------
+let headbands = DEFAULT_HEADBANDS;
+const stripe = (h) => `repeating-linear-gradient(90deg, ${h.colors[0]} 0 3px, ${h.colors[1] || h.colors[0]} 3px 5px)`;
+
+async function loadHeadbands() {
+  headbands = (await api('/api/admin/headbands').catch(() => null)) || DEFAULT_HEADBANDS;
+  renderPalette();
+}
+async function saveHeadbands() {
+  headbands = await api('/api/admin/headbands', { method: 'PUT', body: JSON.stringify(headbands) });
+  toast('Kapitaalbanden opgeslagen');
+}
+function renderPalette() {
+  const list = $('palList');
+  list.innerHTML = headbands.map((h, i) => `<div class="pal-row" data-i="${i}">
+      <i style="background:${stripe(h)}"></i>
+      <input type="text" data-f="code" placeholder="Code" value="${esc(h.code)}">
+      <input type="text" data-f="name" placeholder="Naam" value="${esc(h.name)}">
+      <input type="color" data-f="c0" value="${h.colors[0]}" title="Kleur">
+      <input type="color" data-f="c1" value="${h.colors[1] || h.colors[0]}" title="Tweede kleur (gestreept)" ${h.colors[1] ? '' : 'data-off'}>
+      <label class="pal-two"><input type="checkbox" data-f="two" ${h.colors[1] ? 'checked' : ''}> gestreept</label>
+      <button class="btn ghost sm danger" data-f="del" aria-label="Verwijderen">✕</button>
+    </div>`).join('');
+  list.querySelectorAll('.pal-row').forEach((row) => {
+    const h = headbands[+row.dataset.i];
+    row.querySelectorAll('[data-f]').forEach((input) => {
+      const f = input.dataset.f;
+      if (f === 'del') { input.onclick = () => { headbands.splice(+row.dataset.i, 1); renderPalette(); saveHeadbands(); }; return; }
+      input.addEventListener('change', () => {
+        if (f === 'code' || f === 'name') h[f] = input.value;
+        if (f === 'c0') h.colors[0] = input.value;
+        if (f === 'c1' && h.colors[1]) h.colors[1] = input.value;
+        if (f === 'two') h.colors = input.checked ? [h.colors[0], row.querySelector('[data-f=c1]').value] : [h.colors[0]];
+        renderPalette();
+        saveHeadbands();
+      });
+    });
+  });
+}
+$('palAdd').onclick = () => { headbands.push({ code: '', name: 'Nieuwe kleur', colors: ['#ffffff'] }); renderPalette(); saveHeadbands(); };
+$('palReset').onclick = () => { if (confirm('De standaardlijst terugzetten? Je eigen codes gaan verloren.')) { headbands = DEFAULT_HEADBANDS.map((h) => ({ ...h, colors: [...h.colors] })); renderPalette(); saveHeadbands(); } };
 
 async function refreshCover(entry) {
   const b = entry.meta;
@@ -518,6 +597,7 @@ function openDrawer(entry) {
         <h4>Boek</h4>
         <div class="form">
           <label class="f full">Titel <input type="text" data-k="title" value="${esc(b.title)}"></label>
+          <label class="f full">Bestandsnaam <input type="text" data-k="fileName" spellcheck="false" value="${esc(b.fileName || '')}"></label>
           <label class="f">Uitvoering <select class="field" data-k="binding">
             ${Object.entries(BINDINGS).map(([v, x]) => `<option value="${v}" ${b.binding === v ? 'selected' : ''}>${x.label}</option>`).join('')}
           </select></label>
@@ -535,7 +615,10 @@ function openDrawer(entry) {
               <input type="color" data-k="coverColor" value="${auto ? '#1f2a44' : b.coverColor}" ${auto ? 'disabled' : ''}></div>
           </div>
         </div>
-        <div class="color-row" style="margin-top:10px;font-size:13.5px">Kapitaalband (hardcover) <input type="color" data-k="headbandColor" value="${b.headbandColor || '#ffffff'}"></div>
+        <label class="f" style="margin-top:12px">Kapitaalband (hardcover)
+          <div class="hb-pick"><i data-hbsw></i><select class="field" data-hb>${headbands.map((h, i) => `<option value="${i}">${esc(headbandLabel(h))}</option>`).join('')}<option value="custom">Eigen kleur…</option></select>
+          <input type="color" data-hbcustom value="${headbandOf(b).colors[0]}"></div>
+        </label>
         <div class="meta" data-spine style="margin-top:6px"></div>
       </div>
       <div class="d-sec" data-files></div>
@@ -555,6 +638,7 @@ function openDrawer(entry) {
     </div>`;
   drawThumb(drawer.querySelector('.mini > div'), b, [62, 72]);
   spineLine(b);
+  setupHeadbandPick(entry);
   fillFiles(entry);
   fillPreflight(entry);
   fillDrawerLists(entry);
@@ -620,6 +704,7 @@ function fillFiles(entry) {
       if (which === 'pdf') {
         cover = await makeCover({ data: new Uint8Array(buf.slice(0)) }, info.trim, !b.coverPdf && b.coverMode !== 'none').catch(() => null);
         if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
+        q.set('colorProfile', info.colorProfile || '');
       }
       bar.style.display = 'block';
       bar.firstElementChild.style.width = '0';
@@ -696,6 +781,10 @@ function fillPreflight(entry) {
         ]);
         const r = await preflight(data, (f) => { bar.firstElementChild.style.width = f * 100 + '%'; });
         preflightCache.set(key, r);
+        if (w === 'pdf') {
+          const oi = r.intents[0];
+          entry.meta = await api(`/api/admin/books/${b.id}`, { method: 'PATCH', body: JSON.stringify({ colorProfile: oi ? oi.id || oi.info || oi.description || 'Output intent zonder naam' : '' }) }).catch(() => entry.meta);
+        }
         if (drawerEntry === entry) fillPreflight(entry);
       } catch (err) {
         result.insertAdjacentHTML('beforeend', `<div class="check"><span class="ic bad">!</span><div>Controle mislukt: ${esc(err.message)}</div></div>`);
@@ -742,6 +831,25 @@ function preflightHtml(label, r, b) {
   return `<div style="margin-top:12px"><div class="sub" style="font-size:12px;font-weight:600;color:var(--soft);margin-bottom:2px">${esc(label)}</div>${out.join('')}</div>`;
 }
 
+function setupHeadbandPick(entry) {
+  const sel = drawer.querySelector('[data-hb]'), custom = drawer.querySelector('[data-hbcustom]'), sw = drawer.querySelector('[data-hbsw]');
+  const cur = headbandOf(entry.meta);
+  const idx = headbands.findIndex((h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || ''));
+  sel.value = idx >= 0 ? String(idx) : 'custom';
+  custom.hidden = idx >= 0;
+  sw.style.background = stripe(cur);
+  const saveHb = async (h) => {
+    sw.style.background = stripe(h);
+    entry.meta = await api(`/api/admin/books/${entry.meta.id}`, { method: 'PATCH', body: JSON.stringify({ headband: h }) });
+    toast('Opgeslagen');
+  };
+  sel.onchange = () => {
+    custom.hidden = sel.value !== 'custom';
+    saveHb(sel.value === 'custom' ? { code: '', name: '', colors: [custom.value] } : headbands[+sel.value]);
+  };
+  custom.onchange = () => saveHb({ code: '', name: '', colors: [custom.value] });
+}
+
 function spineLine(b) {
   const el = drawer.querySelector('[data-spine]');
   if (!el) return;
@@ -779,6 +887,7 @@ function fillDrawerLists(entry) {
   });
 }
 
+loadHeadbands();
 load().catch((e) => { $('books').innerHTML = `<div class="empty">Laden mislukt: ${esc(e.message)}</div>`; });
 </script>
 </body>

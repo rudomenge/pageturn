@@ -61,6 +61,8 @@
         <div class="menu-pop edit-pop" id="editPop" hidden>
           <div class="menu-group">
             <div class="menu-label">Bewerken · alleen voor jou</div>
+            <label class="ed-field">Titel <input id="edTitle" autocomplete="off"></label>
+            <label class="ed-field">Bestandsnaam <input id="edFileName" autocomplete="off" spellcheck="false"></label>
             <label class="ed-field">Uitvoering
               <select id="edBinding"><option value="hardcover">Hardcover</option><option value="softcover">Softcover</option><option value="magazine">Magazine</option></select>
             </label>
@@ -73,7 +75,9 @@
             <label class="ed-field" id="edCoverModeWrap">Omslag in de PDF
               <select id="edCoverMode"><option value="outer">Eerste en laatste pagina</option><option value="full">Incl. binnenkant omslag</option><option value="none">Geen omslag in de PDF</option></select>
             </label>
-            <label class="ed-field ed-color" id="edHeadbandWrap">Kapitaalband <input type="color" id="edHeadband" value="#ffffff"></label>
+            <div class="ed-field" id="edHeadbandWrap">Kapitaalband
+              <div class="ed-hb"><i id="edHbSwatch"></i><select id="edHeadband"></select><input type="color" id="edHbCustom" value="#ffffff" title="Eigen kleur" hidden></div>
+            </div>
           </div>
           <div class="menu-group" id="edFiles">
             <div class="menu-label">Bestanden</div>
@@ -155,6 +159,8 @@
         <div class="pl-title" id="plTitle"></div>
         <div class="pl-line" id="plFormat"></div>
         <div class="pl-line" id="plExtent"></div>
+        <div class="pl-line" id="plPaper"></div>
+        <div class="pl-line" id="plOwner" hidden></div>
       </div>
     </div>
   </section>

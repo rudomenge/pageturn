@@ -1,6 +1,7 @@
 // Bladerboek-viewer: rendert een PDF als boek met realistische pageturn (StPageFlip),
 // tekent papierblok, kaft en rug passend bij uitvoering en paginatal, en beheert opmerkingen.
 import * as pdfjsLib from './vendor/pdf.min.mjs';
+import { DEFAULT_HEADBANDS, headbandOf, headbandLabel } from './headbands.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
 
@@ -290,10 +291,6 @@ function setupEditMenu() {
   $('edPaper').value = m.paperType || 'silk';
   $('edCoverMode').value = m.coverMode || 'outer';
   $('edCoverModeWrap').hidden = !!m.coverPdf;
-  $('edHeadband').value = m.headbandColor || '#ffffff';
-  $('edHeadbandWrap').hidden = state.binding !== 'hardcover';
-  $('edHeadband').addEventListener('input', (e) => document.documentElement.style.setProperty('--headband', e.target.value));
-  $('edHeadband').addEventListener('change', (e) => save({ headbandColor: e.target.value }));
 
   const save = async (body) => {
     status('Opslaan…');
@@ -308,6 +305,16 @@ function setupEditMenu() {
       return false;
     }
   };
+  $('edTitle').value = m.title || '';
+  $('edFileName').value = m.fileName || '';
+  $('edTitle').addEventListener('change', async (e) => {
+    if (await save({ title: e.target.value })) { document.title = state.meta.title; updatePlacard(); }
+  });
+  $('edFileName').addEventListener('change', async (e) => {
+    if (await save({ fileName: e.target.value })) { $('edFileName').value = state.meta.fileName; updatePlacard(); fillEditFiles(); }
+  });
+  $('edHeadbandWrap').hidden = state.binding !== 'hardcover';
+  setupHeadbandPicker(save);
   $('edBinding').addEventListener('change', async (e) => {
     if (await save({ binding: e.target.value })) { switchBinding(e.target.value); fillEditFiles(); $('edHeadbandWrap').hidden = state.binding !== 'hardcover'; }
   });
@@ -321,6 +328,36 @@ function setupEditMenu() {
   $('edPaper').addEventListener('change', savePaper);
   $('edCoverMode').addEventListener('change', async (e) => { if (await save({ coverMode: e.target.value })) reloadAtCurrentPage(); });
   fillEditFiles();
+}
+
+// Kapitaalband kiezen uit de lijst van de beheerpagina (of de standaardlijst), of een eigen kleur.
+async function setupHeadbandPicker(save) {
+  const sel = $('edHeadband'), custom = $('edHbCustom'), sw = $('edHbSwatch');
+  let list = DEFAULT_HEADBANDS;
+  try { list = (await adminFetch('/api/admin/headbands')) || DEFAULT_HEADBANDS; } catch {}
+  const cur = headbandOf(state.meta);
+  const same = (h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || '');
+  sel.innerHTML = list.map((h, i) => `<option value="${i}">${escapeHtml(headbandLabel(h))}</option>`).join('') + '<option value="custom">Eigen kleur…</option>';
+  const idx = list.findIndex(same);
+  sel.value = idx >= 0 ? String(idx) : 'custom';
+  custom.hidden = idx >= 0;
+  custom.value = cur.colors[0];
+  const paint = (h) => {
+    sw.style.background = `repeating-linear-gradient(90deg, ${h.colors[0]} 0 3px, ${h.colors[1] || shade(h.colors[0], luminance(h.colors[0]) > 0.5 ? -0.3 : 0.25)} 3px 5px)`;
+    applyHeadband(h);
+  };
+  paint(cur);
+  const choose = async (h) => {
+    paint(h);
+    if (await save({ headband: h })) updatePlacard();
+  };
+  sel.addEventListener('change', () => {
+    custom.hidden = sel.value !== 'custom';
+    if (sel.value === 'custom') return choose({ code: '', name: '', colors: [custom.value] });
+    choose(list[+sel.value]);
+  });
+  custom.addEventListener('input', () => paint({ colors: [custom.value] }));
+  custom.addEventListener('change', () => choose({ code: '', name: '', colors: [custom.value] }));
 }
 
 function fillEditFiles() {
@@ -349,7 +386,10 @@ function fillEditFiles() {
       const trim = insetFrom(crop, trimBox);
       const q = new URLSearchParams({ fileName: file.name, pageCount: String(doc.getPageCount()) });
       if (trim) q.set('trim', JSON.stringify(trim));
-      if (which === 'pdf') q.set('pageSize', JSON.stringify({ widthMm: trimBox.width * PT_TO_MM, heightMm: trimBox.height * PT_TO_MM }));
+      if (which === 'pdf') {
+        q.set('pageSize', JSON.stringify({ widthMm: trimBox.width * PT_TO_MM, heightMm: trimBox.height * PT_TO_MM }));
+        q.set('colorProfile', (await import('./preflight.js')).colorProfileOf(doc));
+      }
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.onprogress = (e) => status(`Uploaden… ${Math.round((e.loaded / e.total) * 100)}%`);
@@ -553,7 +593,7 @@ function build(startIndex) {
   document.body.classList.add('b-' + state.binding);
   document.documentElement.style.setProperty('--cover', state.coverColor);
   document.documentElement.style.setProperty('--cover-ink', luminance(state.coverColor) > 0.6 ? '#1d2430' : '#fff');
-  document.documentElement.style.setProperty('--headband', /^#[0-9a-f]{6}$/i.test(state.meta.headbandColor || '') ? state.meta.headbandColor : '#ffffff');
+  applyHeadband(headbandOf(state.meta));
   document.documentElement.style.setProperty('--endpaper', mix(state.coverColor, '#f4efe4', 0.9));
 
   if (state.flip) { try { state.flip.destroy(); } catch {} state.flip = null; }
@@ -800,6 +840,12 @@ function edgeShadows(layers, dir, drop) {
   return out.join(', ') || 'none';
 }
 
+function applyHeadband(h) {
+  const [a, b] = h.colors;
+  document.documentElement.style.setProperty('--headband', a);
+  document.documentElement.style.setProperty('--headband2', b || shade(a, luminance(a) > 0.5 ? -0.3 : 0.25));
+}
+
 function luminance(hex) {
   const n = parseInt(hex.slice(1), 16);
   return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
@@ -828,7 +874,20 @@ function updatePlacard() {
   $('plFormat').textContent = `Formaat ${cm(w)} × ${cm(h)} cm${std ? ` (${std[0]})` : ''}, ${orient}`;
   const spineMm = (state.innerCount / 2) * paperMm() + 2 * b.coverMm + (state.binding === 'hardcover' ? 1.5 : 0);
   const spine = state.binding === 'magazine' ? 'geniet' : `rug ca. ${spineMm < 10 ? spineMm.toFixed(1).replace('.', ',') : Math.round(spineMm)} mm`;
-  $('plExtent').textContent = `${state.pdfPageCount} pagina's · ${b.label} · ${spine}${state.meta.paperGsm ? ` · ${state.meta.paperGsm} g/m²` : ''}`;
+  $('plExtent').textContent = `${state.pdfPageCount} pagina's · ${b.label} · ${spine}`;
+  const PAPER_NAMES = { gloss: 'glans', silk: 'mat', uncoated: 'ongestreken', bulky: 'romandruk' };
+  const paper = state.meta.paperGsm ? `Papier ${state.meta.paperGsm} g/m² ${PAPER_NAMES[state.meta.paperType] || 'mat'}` : '';
+  const band = headbandOf(state.meta);
+  const hb = state.binding === 'hardcover' ? `kapitaalband ${[(band.name || '').toLowerCase(), band.code].filter(Boolean).join(' ') || 'eigen kleur'}` : '';
+  $('plPaper').textContent = [paper, hb].filter(Boolean).join(' · ').replace(/^k/, (c) => (paper ? c : 'K'));
+  $('plPaper').hidden = !paper && !hb;
+  // Alleen voor de eigenaar: bestandsnaam en kleurprofiel.
+  const own = $('plOwner');
+  own.hidden = !state.owner;
+  if (state.owner) {
+    const prof = state.meta.colorProfile === undefined ? 'kleurprofiel onbekend' : state.meta.colorProfile || 'geen kleurprofiel';
+    own.textContent = `${state.meta.fileName || ''} · ${prof}`;
+  }
   $('placard').hidden = false;
 }
 

@@ -323,3 +323,20 @@ function summarize(r) {
     minPpi: images.length ? Math.min(...images.map((i) => i.ppi)) : null,
   };
 }
+
+// Naam van het kleurprofiel (output intent) van een met pdf-lib geladen PDF; '' als er geen is.
+export function colorProfileOf(doc) {
+  try {
+    const oi = doc.context.lookup(doc.catalog.get(PDFName.of('OutputIntents')));
+    if (!(oi instanceof PDFArray) || !oi.size()) return '';
+    const d = doc.context.lookup(oi.get(0));
+    for (const key of ['OutputConditionIdentifier', 'Info', 'OutputCondition']) {
+      const v = d instanceof PDFDict ? doc.context.lookup(d.get(PDFName.of(key))) : null;
+      const t = v instanceof PDFString || v instanceof PDFHexString ? v.decodeText().trim() : '';
+      if (t) return t;
+    }
+    return 'Output intent zonder naam';
+  } catch {
+    return '';
+  }
+}
