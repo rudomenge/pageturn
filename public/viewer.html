@@ -7,41 +7,7 @@
 <link rel="stylesheet" href="viewer.css">
 <script src="vendor/page-flip.browser.js"></script>
 </head>
-<body class="env-desk">
-<header class="topbar">
-  <div class="controls">
-    <div class="menu">
-      <button class="btn" id="menuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">
-        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Opties</span>
-        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="menu-pop" id="menuPop" hidden>
-        <div class="menu-group" id="bindingSeg" role="group" aria-label="Uitvoering">
-          <div class="menu-label">Uitvoering</div>
-          <button data-binding="hardcover">Hardcover</button>
-          <button data-binding="softcover">Softcover</button>
-          <button data-binding="magazine">Magazine</button>
-        </div>
-        <div class="menu-group" id="envGroup" role="group" aria-label="Omgeving">
-          <div class="menu-label">Omgeving</div>
-          <button data-env="desk">Houten tafel</button>
-          <button data-env="studio">Lichte studio</button>
-          <button data-env="dark">Donker</button>
-          <button data-env="linen">Linnen</button>
-        </div>
-        <div class="menu-group">
-          <a class="menu-item" id="downloadBtn" hidden download>
-            <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg>PDF downloaden
-          </a>
-          <button class="menu-item" id="fullscreenBtn">
-            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Volledig scherm
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</header>
-
+<body class="env-studio">
 <main class="layout">
   <section class="stage" id="stage">
     <div class="dropzone" id="dropzone" hidden>
@@ -82,9 +48,41 @@
       </div>
     </div>
 
-    <button class="comments-fab" id="commentsBtn" title="Opmerkingen" aria-label="Opmerkingen" aria-controls="panel" aria-expanded="false" hidden>
-      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><b id="commentCount"></b>
-    </button>
+    <div class="fab-bar">
+      <div class="menu">
+        <button class="fab" id="menuBtn" title="Opties" aria-label="Opties" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">
+          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        </button>
+        <div class="menu-pop" id="menuPop" hidden>
+          <div class="menu-group" id="bindingSeg" role="group" aria-label="Uitvoering">
+            <div class="menu-label">Uitvoering</div>
+            <button data-binding="hardcover">Hardcover</button>
+            <button data-binding="softcover">Softcover</button>
+            <button data-binding="magazine">Magazine</button>
+          </div>
+          <div class="menu-group" id="envGroup" role="group" aria-label="Achtergrond">
+            <div class="menu-label">Achtergrond</div>
+            <div class="swatches">
+              <button data-env="studio" title="Licht" aria-label="Licht"><i></i><span>Licht</span></button>
+              <button data-env="linen" title="Zand" aria-label="Zand"><i></i><span>Zand</span></button>
+              <button data-env="desk" title="Hout" aria-label="Hout"><i></i><span>Hout</span></button>
+              <button data-env="dark" title="Donker" aria-label="Donker"><i></i><span>Donker</span></button>
+            </div>
+          </div>
+          <div class="menu-group">
+            <a class="menu-item" id="downloadBtn" hidden download>
+              <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg>PDF downloaden
+            </a>
+            <button class="menu-item" id="fullscreenBtn">
+              <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Volledig scherm
+            </button>
+          </div>
+        </div>
+      </div>
+      <button class="fab comments-fab" id="commentsBtn" title="Opmerkingen" aria-label="Opmerkingen" aria-controls="panel" aria-expanded="false" hidden>
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><b id="commentCount"></b>
+      </button>
+    </div>
     <aside class="panel" id="panel" role="dialog" aria-label="Opmerkingen" hidden>
       <div class="panel-head">
         <h2>Opmerkingen</h2>

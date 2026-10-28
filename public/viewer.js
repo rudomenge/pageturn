@@ -289,7 +289,7 @@ function computeLayout() {
   const W = area.clientWidth, H = area.clientHeight;
   const b = BINDINGS[state.binding];
   // Ruimte voor kaft-overstek, papierblok en schaduw.
-  const reserveX = W < 640 ? 96 : 150, reserveY = 110; // ruimte voor de pijltjes naast het boek
+  const reserveX = W < 640 ? 96 : 150, reserveY = W < 640 ? 130 : 150; // ruimte voor de pijltjes naast het boek
   const fit = (pagesAcross) => Math.max(120, Math.min(H - reserveY, (W - reserveX) / (pagesAcross * state.aspect)));
   const hL = fit(2), hP = fit(1);
   const landscape = W >= 640 && hL >= 0.55 * hP;
@@ -805,13 +805,11 @@ function setupUi() {
     build(i);
   });
 
-  const env = (() => { try { return localStorage.getItem('bladerboek:env'); } catch { return null; } })();
-  setEnv(env || 'desk');
+  setEnv('studio'); // het boek start altijd op een lichte achtergrond
   $('envGroup').addEventListener('click', (e) => {
     const v = e.target.closest('button')?.dataset.env;
     if (!v) return;
     setEnv(v);
-    try { localStorage.setItem('bladerboek:env', v); } catch {}
   });
 
   const menuBtn = $('menuBtn'), menuPop = $('menuPop');
