@@ -11,26 +11,38 @@
 <header class="topbar">
   <div class="title" id="bookTitle">Bladerboek</div>
   <div class="controls">
-    <div class="seg" id="bindingSeg" role="group" aria-label="Uitvoering">
-      <button data-binding="hardcover">Hardcover</button>
-      <button data-binding="softcover">Softcover</button>
-      <button data-binding="magazine">Magazine</button>
-    </div>
-    <select id="envSelect" aria-label="Omgeving">
-      <option value="desk">Houten tafel</option>
-      <option value="studio">Lichte studio</option>
-      <option value="dark">Donker</option>
-      <option value="linen">Linnen</option>
-    </select>
-    <a class="btn" id="downloadBtn" hidden download>
-      <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg><span>PDF downloaden</span>
-    </a>
     <button class="btn" id="commentsBtn" hidden>
       <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Opmerkingen</span><b id="commentCount"></b>
     </button>
-    <button class="btn icon" id="fullscreenBtn" title="Volledig scherm">
-      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-    </button>
+    <div class="menu">
+      <button class="btn" id="menuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Opties</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="menu-pop" id="menuPop" hidden>
+        <div class="menu-group" id="bindingSeg" role="group" aria-label="Uitvoering">
+          <div class="menu-label">Uitvoering</div>
+          <button data-binding="hardcover">Hardcover</button>
+          <button data-binding="softcover">Softcover</button>
+          <button data-binding="magazine">Magazine</button>
+        </div>
+        <div class="menu-group" id="envGroup" role="group" aria-label="Omgeving">
+          <div class="menu-label">Omgeving</div>
+          <button data-env="desk">Houten tafel</button>
+          <button data-env="studio">Lichte studio</button>
+          <button data-env="dark">Donker</button>
+          <button data-env="linen">Linnen</button>
+        </div>
+        <div class="menu-group">
+          <a class="menu-item" id="downloadBtn" hidden download>
+            <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg>PDF downloaden
+          </a>
+          <button class="menu-item" id="fullscreenBtn">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Volledig scherm
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 

@@ -800,9 +800,19 @@ function setupUi() {
   });
 
   const env = (() => { try { return localStorage.getItem('bladerboek:env'); } catch { return null; } })();
-  $('envSelect').value = env || 'desk';
   setEnv(env || 'desk');
-  $('envSelect').addEventListener('change', (e) => { setEnv(e.target.value); try { localStorage.setItem('bladerboek:env', e.target.value); } catch {} });
+  $('envGroup').addEventListener('click', (e) => {
+    const v = e.target.closest('button')?.dataset.env;
+    if (!v) return;
+    setEnv(v);
+    try { localStorage.setItem('bladerboek:env', v); } catch {}
+  });
+
+  const menuBtn = $('menuBtn'), menuPop = $('menuPop');
+  const setMenu = (open) => { menuPop.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open)); };
+  menuBtn.addEventListener('click', (e) => { e.stopPropagation(); setMenu(menuPop.hidden); });
+  document.addEventListener('click', (e) => { if (!menuPop.hidden && !e.target.closest('.menu')) setMenu(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
 
   $('prevBtn').addEventListener('click', () => state.flip?.flipPrev('bottom'));
   $('nextBtn').addEventListener('click', () => state.flip?.flipNext('bottom'));
@@ -858,6 +868,7 @@ function setupUi() {
 function setEnv(env) {
   document.body.classList.remove('env-desk', 'env-studio', 'env-dark', 'env-linen');
   document.body.classList.add('env-' + env);
+  document.querySelectorAll('#envGroup button').forEach((b) => b.classList.toggle('on', b.dataset.env === env));
 }
 
 function updateBindingButtons() {
