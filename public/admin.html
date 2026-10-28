@@ -206,7 +206,7 @@ const fmtDate = (iso) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric',
 const fmtDay = (iso) => new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
 const mm = (v) => (Math.round(v) / 10).toLocaleString('nl-NL');
 const PT_TO_MM = 25.4 / 72;
-const DEFAULT_COVER = '#2b3a55';
+const DEFAULT_COVER = '#f3f1ec';
 // Deze browser is van de eigenaar: eigen bezoeken aan deellinks tellen niet mee als "bekeken".
 try { localStorage.setItem('bladerboek:owner', '1'); } catch {}
 
@@ -535,7 +535,8 @@ function openDrawer(entry) {
               <input type="color" data-k="coverColor" value="${auto ? '#1f2a44' : b.coverColor}" ${auto ? 'disabled' : ''}></div>
           </div>
         </div>
-        <div class="meta" data-spine style="margin-top:10px"></div>
+        <div class="color-row" style="margin-top:10px;font-size:13.5px">Kapitaalband (hardcover) <input type="color" data-k="headbandColor" value="${b.headbandColor || '#ffffff'}"></div>
+        <div class="meta" data-spine style="margin-top:6px"></div>
       </div>
       <div class="d-sec" data-files></div>
       <div class="d-sec" data-preflight></div>
@@ -600,6 +601,8 @@ function fillFiles(entry) {
     ${fileRow('Binnenwerk', `${esc(b.fileName || 'boek.pdf')} · ${b.pageCount || '?'} pagina's${b.pdfVersion ? ' · vervangen ' + esc(fmtDay(new Date(b.pdfVersion).toISOString())) : ''}`, pickBtn('pdf', 'Vervangen'))}
     ${c ? fileRow('Omslag', `${esc(c.fileName)} · ${c.pageCount || '?'} ${c.pageCount === 1 ? 'pagina' : "pagina's"}`, pickBtn('coverpdf', 'Vervangen') + '<button class="btn ghost sm danger" data-act="rmcover" aria-label="Omslag verwijderen">✕</button>')
       : fileRow('Omslag', 'Nog geen losse omslag. Eén spread (achterkant, rug, voorkant), of losse pagina\'s: voor- en achterkant, of 4 pagina\'s met de binnenkant.', pickBtn('coverpdf', 'Toevoegen'))}
+    ${b.endpaperPdf ? fileRow('Schutblad', `${esc(b.endpaperPdf.fileName)} · alleen zichtbaar bij hardcover`, pickBtn('endpaperpdf', 'Vervangen') + '<button class="btn ghost sm danger" data-act="rmep" aria-label="Schutblad verwijderen">✕</button>')
+      : fileRow('Schutblad', 'Optioneel, alleen bij hardcover. Een spread of losse pagina\'s; met 4 pagina\'s verschillen voor en achter.', pickBtn('endpaperpdf', 'Toevoegen'))}
     <div class="progress" data-prog><i></i></div>
     <div class="status" data-fstatus></div>`;
   const status = (t) => (el.querySelector('[data-fstatus]').textContent = t);
@@ -627,13 +630,19 @@ function fillFiles(entry) {
       else if (which === 'coverpdf') await refreshCover(entry);
       redraw(entry);
       openDrawer(entry);
-      toast(which === 'pdf' ? 'Binnenwerk vervangen' : 'Omslag opgeslagen');
+      toast(which === 'pdf' ? 'Binnenwerk vervangen' : which === 'coverpdf' ? 'Omslag opgeslagen' : 'Schutblad opgeslagen');
     } catch (e) {
       status(e.message);
     } finally {
       bar.style.display = 'none';
     }
   }));
+  const rmEp = el.querySelector('[data-act=rmep]');
+  if (rmEp) rmEp.onclick = async () => {
+    if (!confirm('Schutblad verwijderen?')) return;
+    entry.meta = await api(`/api/admin/books/${b.id}/endpaperpdf`, { method: 'DELETE' });
+    openDrawer(entry);
+  };
   const rm = el.querySelector('[data-act=rmcover]');
   if (rm) rm.onclick = async () => {
     if (!confirm('Losse omslag verwijderen? Het boek gebruikt dan weer de omslaginstelling van de PDF.')) return;

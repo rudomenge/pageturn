@@ -40,8 +40,8 @@ function loadBook(id) {
   return meta && fs.existsSync(path.join(bookDir(id), 'book.pdf')) ? meta : null;
 }
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt };
 }
 function cleanSettings(body, meta) {
   const out = {};
@@ -49,6 +49,7 @@ function cleanSettings(body, meta) {
   if (BINDINGS.includes(body.binding)) out.binding = body.binding;
   if (typeof body.coverColor === 'string' && /^(#[0-9a-f]{6}|auto)$/i.test(body.coverColor)) out.coverColor = body.coverColor;
   if (COVER_MODES.includes(body.coverMode)) out.coverMode = body.coverMode;
+  if (typeof body.headbandColor === 'string' && /^#[0-9a-f]{6}$/i.test(body.headbandColor)) out.headbandColor = body.headbandColor;
   let ps = body.pageSize;
   if (typeof ps === 'string') ps = readJsonString(ps);
   if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
@@ -164,12 +165,15 @@ app.put('/api/admin/books', requireAdmin, async (req, res) => {
   res.json(meta);
 });
 
-// Binnenwerk vervangen of een losse omslag toevoegen. Deellink, opmerkingen en bezoeken blijven.
-app.put('/api/admin/books/:id/:which(pdf|coverpdf)', requireAdmin, async (req, res) => {
+// Pdf-bestanden per boek: [bestandsnaam, veld in meta.json]
+const EXTRA_PDFS = { pdf: ['book.pdf', null], coverpdf: ['cover.pdf', 'coverPdf'], endpaperpdf: ['endpaper.pdf', 'endpaperPdf'] };
+
+// Binnenwerk vervangen of een losse omslag/schutblad toevoegen. Deellink, opmerkingen en bezoeken blijven.
+app.put('/api/admin/books/:id/:which(pdf|coverpdf|endpaperpdf)', requireAdmin, async (req, res) => {
   const meta = loadBook(req.params.id);
   if (!meta) return res.status(404).json({ error: 'Boek niet gevonden' });
-  const isCover = req.params.which === 'coverpdf';
-  const file = path.join(bookDir(meta.id), isCover ? 'cover.pdf' : 'book.pdf');
+  const [name, field] = EXTRA_PDFS[req.params.which];
+  const file = path.join(bookDir(meta.id), name);
   const tmp = file + '.upload';
   let info;
   try {
@@ -182,7 +186,8 @@ app.put('/api/admin/books/:id/:which(pdf|coverpdf)', requireAdmin, async (req, r
   fs.renameSync(tmp, file);
   const fileName = String(req.query.fileName || 'boek.pdf').slice(0, 200);
   const size = fs.statSync(file).size;
-  if (isCover) meta.coverPdf = { fileName, pageCount: info.pageCount, trim: info.trim, size, version: Date.now() };
+  if (req.params.which !== 'endpaperpdf') delete meta.coverVersion;
+  if (field) meta[field] = { fileName, pageCount: info.pageCount, trim: info.trim, size, version: Date.now() };
   else {
     Object.assign(meta, { fileName, pageCount: info.pageCount, trim: info.trim, size, pdfVersion: Date.now() });
     const ps = cleanSettings({ pageSize: req.query.pageSize }, meta).pageSize;
@@ -191,19 +196,22 @@ app.put('/api/admin/books/:id/:which(pdf|coverpdf)', requireAdmin, async (req, r
   writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
   res.json(meta);
 });
-app.delete('/api/admin/books/:id/coverpdf', requireAdmin, (req, res) => {
+app.delete('/api/admin/books/:id/:which(coverpdf|endpaperpdf)', requireAdmin, (req, res) => {
   const meta = loadBook(req.params.id);
   if (!meta) return res.status(404).json({ error: 'Boek niet gevonden' });
-  fs.rmSync(path.join(bookDir(meta.id), 'cover.pdf'), { force: true });
-  delete meta.coverPdf;
+  const [name, field] = EXTRA_PDFS[req.params.which];
+  fs.rmSync(path.join(bookDir(meta.id), name), { force: true });
+  delete meta[field];
+  if (req.params.which === 'coverpdf') delete meta.coverVersion;
   writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
   res.json(meta);
 });
-app.get('/api/books/:id/coverpdf', (req, res) => {
+app.get('/api/books/:id/:which(coverpdf|endpaperpdf)', (req, res) => {
   const meta = loadBook(req.params.id);
-  if (!meta || !meta.coverPdf) return res.status(404).end();
+  const [name, field] = EXTRA_PDFS[req.params.which];
+  if (!meta || !meta[field]) return res.status(404).end();
   res.set('Content-Type', 'application/pdf');
-  res.sendFile(path.join(bookDir(meta.id), 'cover.pdf'));
+  res.sendFile(path.join(bookDir(meta.id), name));
 });
 
 app.patch('/api/admin/books/:id', requireAdmin, (req, res) => {

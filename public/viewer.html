@@ -50,9 +50,37 @@
     </div>
 
     <a class="fab home-fab" id="homeBtn" href="/" title="Terug naar je boeken" hidden>
-      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>Boeken</span>
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
     </a>
+    <div class="mode-badge" id="modeBadge" hidden></div>
     <div class="fab-bar">
+      <div class="menu edit-menu" id="editMenu" hidden>
+        <button class="fab" id="editBtn" title="Bewerken (alleen voor jou)" aria-label="Bewerken" aria-haspopup="true" aria-expanded="false" aria-controls="editPop">
+          <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>
+        </button>
+        <div class="menu-pop edit-pop" id="editPop" hidden>
+          <div class="menu-group">
+            <div class="menu-label">Bewerken · alleen voor jou</div>
+            <label class="ed-field">Uitvoering
+              <select id="edBinding"><option value="hardcover">Hardcover</option><option value="softcover">Softcover</option><option value="magazine">Magazine</option></select>
+            </label>
+            <div class="ed-row">
+              <label class="ed-field">Papier g/m²<input id="edGsm" inputmode="numeric" placeholder="standaard"></label>
+              <label class="ed-field">Soort
+                <select id="edPaper"><option value="gloss">Glans (mc)</option><option value="silk">Mat / silk</option><option value="uncoated">Ongestreken</option><option value="bulky">Romandruk</option></select>
+              </label>
+            </div>
+            <label class="ed-field" id="edCoverModeWrap">Omslag in de PDF
+              <select id="edCoverMode"><option value="outer">Eerste en laatste pagina</option><option value="full">Incl. binnenkant omslag</option><option value="none">Geen omslag in de PDF</option></select>
+            </label>
+            <label class="ed-field ed-color" id="edHeadbandWrap">Kapitaalband <input type="color" id="edHeadband" value="#ffffff"></label>
+          </div>
+          <div class="menu-group" id="edFiles">
+            <div class="menu-label">Bestanden</div>
+          </div>
+          <div class="ed-status" id="edStatus" role="status"></div>
+        </div>
+      </div>
       <div class="menu">
         <button class="fab" id="menuBtn" title="Opties" aria-label="Opties" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">
           <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>

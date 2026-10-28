@@ -40,7 +40,7 @@ const CSS = `
 .b3d-hard .b3d-front::before { content: ""; position: absolute; top: 0; bottom: 0; left: 4.5%; width: 2.2%; z-index: 1;
   background: linear-gradient(90deg, rgba(0,0,0,.28), rgba(255,255,255,.18) 45%, rgba(0,0,0,.12)); }
 .b3d-front .b3d-title { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
-  padding: 14%; color: #fff; font: 600 var(--b3d-fs) / 1.25 "Inter", system-ui, sans-serif; }
+  padding: 14%; color: var(--b3d-ink, #fff); font: 600 var(--b3d-fs) / 1.25 "Inter", system-ui, sans-serif; }
 .b3d-back { background: var(--b3d-cover); filter: brightness(.8); }
 .b3d-spine { background: linear-gradient(90deg, var(--b3d-spine-dark), var(--b3d-cover) 35%, var(--b3d-spine-light) 55%, var(--b3d-cover) 75%, var(--b3d-spine-dark)); }
 .b3d-mag .b3d-spine { background: linear-gradient(90deg, var(--b3d-spine-dark), var(--b3d-spine-light) 50%, var(--b3d-spine-dark)); }
@@ -84,13 +84,15 @@ export function renderBook3D(el, opts) {
   const k = Math.min((boxW * 0.78) / (coverW + tMm * 0.6), (boxH * 0.86) / coverH);
   const W = coverW * k, H = coverH * k, T = Math.max(2, tMm * k);
   const ov = ovMm * k, board = Math.min(T / 3, b.coverMm * k);
-  const color = /^#[0-9a-f]{6}$/i.test(opts.coverColor || '') ? opts.coverColor : '#2b3a55';
+  const color = /^#[0-9a-f]{6}$/i.test(opts.coverColor || '') ? opts.coverColor : '#f3f1ec';
 
   el.innerHTML = '';
   el.classList.add('b3d', binding === 'hardcover' ? 'b3d-hard' : binding === 'magazine' ? 'b3d-mag' : 'b3d-soft');
   el.style.width = boxW + 'px';
   el.style.height = boxH + 'px';
   el.style.setProperty('--b3d-cover', color);
+  const n = parseInt(color.slice(1), 16);
+  el.style.setProperty('--b3d-ink', (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 > 0.6 ? '#1d2430' : '#fff');
   el.style.setProperty('--b3d-spine-dark', shade(color, -0.35));
   el.style.setProperty('--b3d-spine-light', shade(color, 0.18));
   el.style.setProperty('--b3d-fs', Math.max(8, W / 11) + 'px');

@@ -27,11 +27,15 @@ const state = {
   pdf: null,
   coverPdf: null, // losse omslag-PDF (optioneel)
   coverTrim: null,
+  epPdf: null, // schutblad-PDF (optioneel, alleen bij hardcover)
+  epTrim: null,
+  epHalves: [], // [{ page, part }] één helft per schutbladpagina
+  owner: false, // bewerkmodus: browser van de eigenaar, niet als ?voorbeeld
   pdfPageCount: 0,
   pageMm: { w: 210, h: 297 },
   trimInset: null, // { left, top, right, bottom } in pt t.o.v. de zichtbare pagina
   aspect: 210 / 297,
-  coverColor: '#2b3a55',
+  coverColor: '#f3f1ec', // hardcover zonder omslag: standaard wit
   pages: [], // beschrijving van elke bladerpagina
   innerCount: 0,
   images: new Map(), // imgKey(pagina) -> blob-URL
@@ -143,6 +147,15 @@ async function openPdf(src) {
       console.error(e);
     }
   }
+  if (state.epPdf) { state.epPdf.destroy(); state.epPdf = null; }
+  if (state.mode === 'server' && state.meta.endpaperPdf) {
+    try {
+      state.epPdf = await pdfjsLib.getDocument({ url: `/api/books/${state.bookId}/endpaperpdf?v=${state.meta.endpaperPdf.version}`, isEvalSupported: false }).promise;
+      state.epTrim = state.meta.endpaperPdf.trim;
+    } catch (e) {
+      console.error(e);
+    }
+  }
   if (state.mode === 'server' && state.meta.trim) state.trimInset = state.meta.trim;
 
   const first = await state.pdf.getPage(1);
@@ -159,6 +172,18 @@ async function openPdf(src) {
     let cw = cp.view[2] - cp.view[0] - ct.left - ct.right, ch = cp.view[3] - cp.view[1] - ct.top - ct.bottom;
     if (cp.rotate % 180) [cw, ch] = [ch, cw];
     state.coverSpread = cw / ch > state.aspect * 1.4;
+  }
+  // Schutblad: elke pagina is een spread (twee helften) of één losse pagina.
+  state.epHalves = [];
+  if (state.epPdf) {
+    const et = state.epTrim || { left: 0, top: 0, right: 0, bottom: 0 };
+    for (let i = 1; i <= Math.min(4, state.epPdf.numPages); i++) {
+      const ep = await state.epPdf.getPage(i);
+      let ew = ep.view[2] - ep.view[0] - et.left - et.right, eh = ep.view[3] - ep.view[1] - et.top - et.bottom;
+      if (ep.rotate % 180) [ew, eh] = [eh, ew];
+      if (ew / eh > state.aspect * 1.4) state.epHalves.push({ page: i, part: 'left' }, { page: i, part: 'right' });
+      else state.epHalves.push({ page: i });
+    }
   }
   state.renderHeight = Math.round(Math.min(2200, Math.max(1000, window.innerHeight * (window.devicePixelRatio || 1) * 1.1)));
 
@@ -183,7 +208,7 @@ async function openPdf(src) {
   $('navbar').hidden = false;
   $('sidePrev').hidden = $('sideNext').hidden = false;
   $('commentsBtn').hidden = !state.meta.allowComments;
-  $('homeBtn').hidden = !(state.mode === 'server' && isOwnerBrowser() && !new URLSearchParams(location.search).has('voorbeeld'));
+  setupOwner();
   $('downloadBtn').hidden = !(state.meta.allowDownload && state.downloadUrl) || !!window.BLADERBOEK_DEMO;
   $('downloadBtn').href = state.downloadUrl || '#';
   if (state.downloadName) $('downloadBtn').download = state.downloadName;
@@ -194,6 +219,161 @@ async function openPdf(src) {
   build(Math.max(0, start));
   pumpQueue();
   startViewTracking();
+}
+
+function switchBinding(b) {
+  if (!b || b === state.binding || !state.flip || !(b in BINDINGS)) return;
+  const cur = state.pages[state.flip.getCurrentPageIndex()];
+  state.binding = b;
+  buildPageList();
+  updateBindingButtons();
+  let i = cur.pdfPage ? state.pages.findIndex((p) => p.pdfPage === cur.pdfPage) : state.pages.findIndex((p) => p.role && p.role === cur.role);
+  if (i < 0) i = 0;
+  build(i);
+}
+
+// ---------- Eigenaar: bewerkmodus en modus-label ----------
+function setupOwner() {
+  const ownerBrowser = state.mode === 'server' && isOwnerBrowser();
+  const preview = new URLSearchParams(location.search).has('voorbeeld');
+  state.owner = ownerBrowser && !preview;
+  $('homeBtn').hidden = !state.owner;
+  $('editMenu').hidden = !state.owner;
+  const badge = $('modeBadge');
+  badge.hidden = !ownerBrowser;
+  if (!ownerBrowser) return;
+  badge.classList.toggle('preview', preview);
+  badge.innerHTML = preview
+    ? '<i></i><span>Klantweergave</span><a href="#">Bewerken</a>'
+    : '<i></i><span>Bewerken</span><a href="#">Bekijk als klant</a>';
+  badge.querySelector('a').addEventListener('click', (e) => {
+    e.preventDefault();
+    const u = new URL(location.href);
+    if (preview) u.searchParams.delete('voorbeeld'); else u.searchParams.set('voorbeeld', '');
+    u.hash = currentHash();
+    location.href = u.toString().replace('voorbeeld=', 'voorbeeld');
+  });
+  if (state.owner) setupEditMenu();
+}
+
+function currentHash() {
+  const cur = state.flip && state.pages[state.flip.getCurrentPageIndex()];
+  return cur?.pdfPage ? `#p${cur.pdfPage}` : '';
+}
+
+function reloadAtCurrentPage() {
+  const u = new URL(location.href);
+  u.hash = currentHash();
+  history.replaceState(null, '', u.toString());
+  location.reload();
+}
+
+async function adminFetch(path, opts = {}) {
+  const res = await fetch(path, { credentials: 'same-origin', ...opts });
+  if (res.status === 401) throw new Error('Log eerst in op de beheerpagina');
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function setupEditMenu() {
+  const btn = $('editBtn'), pop = $('editPop'), status = (t) => ($('edStatus').textContent = t);
+  const setOpen = (open) => { pop.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); setOpen(pop.hidden); });
+  document.addEventListener('click', (e) => { if (!pop.hidden && !e.target.closest('.edit-menu')) setOpen(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+
+  const m = state.meta;
+  $('edBinding').value = m.binding in BINDINGS ? m.binding : 'hardcover';
+  $('edGsm').value = m.paperGsm || '';
+  $('edPaper').value = m.paperType || 'silk';
+  $('edCoverMode').value = m.coverMode || 'outer';
+  $('edCoverModeWrap').hidden = !!m.coverPdf;
+  $('edHeadband').value = m.headbandColor || '#ffffff';
+  $('edHeadbandWrap').hidden = state.binding !== 'hardcover';
+  $('edHeadband').addEventListener('input', (e) => document.documentElement.style.setProperty('--headband', e.target.value));
+  $('edHeadband').addEventListener('change', (e) => save({ headbandColor: e.target.value }));
+
+  const save = async (body) => {
+    status('Opslaan…');
+    try {
+      const meta = await adminFetch(`/api/admin/books/${state.bookId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      Object.assign(state.meta, meta);
+      status('Opgeslagen');
+      setTimeout(() => status(''), 1500);
+      return true;
+    } catch (e) {
+      status(e.message);
+      return false;
+    }
+  };
+  $('edBinding').addEventListener('change', async (e) => {
+    if (await save({ binding: e.target.value })) { switchBinding(e.target.value); fillEditFiles(); $('edHeadbandWrap').hidden = state.binding !== 'hardcover'; }
+  });
+  const savePaper = async () => {
+    if (await save({ paperGsm: $('edGsm').value.trim(), paperType: $('edPaper').value })) {
+      $('edGsm').value = state.meta.paperGsm || '';
+      updateDecor();
+    }
+  };
+  $('edGsm').addEventListener('change', savePaper);
+  $('edPaper').addEventListener('change', savePaper);
+  $('edCoverMode').addEventListener('change', async (e) => { if (await save({ coverMode: e.target.value })) reloadAtCurrentPage(); });
+  fillEditFiles();
+}
+
+function fillEditFiles() {
+  const m = state.meta, wrap = $('edFiles'), status = (t) => ($('edStatus').textContent = t);
+  const rows = [
+    ['pdf', 'Binnenwerk', `${m.fileName || 'boek.pdf'} · ${m.pageCount || state.pdfPageCount} pagina's`, true],
+    ['coverpdf', 'Omslag', m.coverPdf ? m.coverPdf.fileName : 'spread of losse pagina\'s', !!m.coverPdf],
+    ['endpaperpdf', 'Schutblad', m.endpaperPdf ? m.endpaperPdf.fileName + (state.binding !== 'hardcover' ? ' · alleen bij hardcover' : '') : 'alleen bij hardcover', !!m.endpaperPdf],
+  ];
+  wrap.innerHTML = '<div class="menu-label">Bestanden</div>' + rows.map(([w, label, sub, has]) => `<div class="ed-file">
+      <div class="grow"><div>${label}</div><div class="sub" title="${escapeHtml(sub)}">${escapeHtml(sub)}</div></div>
+      <label class="btn">${has ? 'Vervangen' : 'Toevoegen'}<input type="file" accept="application/pdf,.pdf" data-up="${w}" hidden></label>
+      ${has && w !== 'pdf' ? `<button class="x" data-rm="${w}" title="${label} verwijderen" aria-label="${label} verwijderen">✕</button>` : ''}
+    </div>`).join('');
+  wrap.querySelectorAll('[data-up]').forEach((input) => input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const which = input.dataset.up;
+    try {
+      if (which === 'pdf' && state.comments.some((c) => c.page) && !confirm('Opmerkingen blijven gekoppeld aan hun paginanummer. Klopt de nummering in de nieuwe PDF nog? Doorgaan?')) return;
+      status('PDF wordt gecontroleerd…');
+      const data = new Uint8Array(await file.arrayBuffer());
+      const { PDFDocument } = await import('./vendor/pdf-lib.esm.min.js');
+      const doc = await PDFDocument.load(data, { updateMetadata: false, ignoreEncryption: true });
+      const pg = doc.getPage(0), crop = pg.getCropBox(), trimBox = pg.getTrimBox();
+      const trim = insetFrom(crop, trimBox);
+      const q = new URLSearchParams({ fileName: file.name, pageCount: String(doc.getPageCount()) });
+      if (trim) q.set('trim', JSON.stringify(trim));
+      if (which === 'pdf') q.set('pageSize', JSON.stringify({ widthMm: trimBox.width * PT_TO_MM, heightMm: trimBox.height * PT_TO_MM }));
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => status(`Uploaden… ${Math.round((e.loaded / e.total) * 100)}%`);
+        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(xhr.status === 401 ? 'Log eerst in op de beheerpagina' : 'Uploaden mislukt')));
+        xhr.onerror = () => reject(new Error('Uploaden mislukt, controleer je verbinding'));
+        xhr.open('PUT', `/api/admin/books/${state.bookId}/${which}?${q}`);
+        xhr.setRequestHeader('Content-Type', 'application/pdf');
+        xhr.send(file);
+      });
+      status('Klaar, het boek wordt opnieuw geladen…');
+      reloadAtCurrentPage();
+    } catch (e) {
+      status(e.message || 'Dit bestand kon niet als PDF worden gelezen');
+    }
+  }));
+  wrap.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`${b.dataset.rm === 'coverpdf' ? 'Losse omslag' : 'Schutblad'} verwijderen?`)) return;
+    try {
+      await adminFetch(`/api/admin/books/${state.bookId}/${b.dataset.rm}`, { method: 'DELETE' });
+      reloadAtCurrentPage();
+    } catch (e) {
+      status(e.message);
+    }
+  }));
 }
 
 function setLoading(text, frac) {
@@ -234,12 +414,22 @@ function buildPageList() {
   const multiple = binding === 'magazine' ? 4 : 2;
   while (inner.length % multiple) inner.push({ kind: 'blank' });
 
+  // Schutblad bij hardcover: binnenkant kaft plus een los schutblad, voor en achter.
+  let flyFront = null, flyBack = null;
+  const h = state.epHalves;
+  if (binding === 'hardcover' && h.length) {
+    const ep = (x) => ({ kind: 'pdf', epPage: x.page, part: x.part });
+    const pick = (k) => (h.length >= 4 ? h[[0, 1, h.length - 2, h.length - 1][k]] : h[k % h.length]);
+    [insideFront, flyFront, flyBack, insideBack] = [ep(pick(0)), ep(pick(1)), ep(pick(2)), ep(pick(3))];
+  }
+
   front.role = 'front'; insideFront.role = 'insideFront'; insideBack.role = 'insideBack'; back.role = 'back';
-  state.pages = [front, insideFront, ...inner, insideBack, back];
+  state.pages = [front, insideFront, ...(flyFront ? [flyFront] : []), ...inner, ...(flyBack ? [flyBack] : []), insideBack, back];
   state.innerCount = inner.length;
 }
 
 function pageLabel(p) {
+  if (p.epPage) return 'Schutblad';
   if (p.role === 'front') return 'Voorkant';
   if (p.role === 'back') return 'Achterkant';
   if (p.pdfPage) return `Pagina ${p.pdfPage}`;
@@ -251,22 +441,24 @@ function pageLabel(p) {
 // Sleutel van het plaatje van een bladerpagina: '12' (binnenwerk) of 'c1front' (losse omslag).
 function imgKey(p) {
   if (p.coverPage) return `c${p.coverPage}${p.part || ''}`;
+  if (p.epPage) return `e${p.epPage}${p.part || ''}`;
   return p.pdfPage ? String(p.pdfPage) : null;
 }
 
 async function renderPage(p) {
   const key = imgKey(p);
   if (state.images.has(key)) return state.images.get(key);
-  const doc = p.coverPage ? state.coverPdf : state.pdf;
-  const page = await doc.getPage(p.coverPage || p.pdfPage);
+  const doc = p.coverPage ? state.coverPdf : p.epPage ? state.epPdf : state.pdf;
+  const page = await doc.getPage(p.coverPage || p.epPage || p.pdfPage);
   const base = page.getViewport({ scale: 1 });
-  const t = (p.coverPage ? state.coverTrim : state.trimInset) || { left: 0, top: 0, right: 0, bottom: 0 };
+  const t = (p.coverPage ? state.coverTrim : p.epPage ? state.epTrim : state.trimInset) || { left: 0, top: 0, right: 0, bottom: 0 };
   const rotated = page.rotate % 180 !== 0;
   const trimW = rotated ? base.width - t.top - t.bottom : base.width - t.left - t.right;
   const trimH = rotated ? base.height - t.left - t.right : base.height - t.top - t.bottom;
-  // Bij een omslag als spread (achterkant, rug, voorkant) snijden we de voor- of achterkant eruit.
-  const partW = p.part ? Math.min(trimW, trimH * state.aspect) : trimW;
-  const partX = p.part === 'front' ? trimW - partW : 0;
+  // Bij een omslag als spread (achterkant, rug, voorkant) snijden we de voor- of achterkant eruit;
+  // een schutblad-spread delen we in twee helften.
+  const partW = p.part === 'left' || p.part === 'right' ? trimW / 2 : p.part ? Math.min(trimW, trimH * state.aspect) : trimW;
+  const partX = p.part === 'front' || p.part === 'right' ? trimW - partW : 0;
   const scale = state.renderHeight / trimH;
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
@@ -360,6 +552,8 @@ function build(startIndex) {
   document.body.classList.remove('b-hardcover', 'b-softcover', 'b-magazine');
   document.body.classList.add('b-' + state.binding);
   document.documentElement.style.setProperty('--cover', state.coverColor);
+  document.documentElement.style.setProperty('--cover-ink', luminance(state.coverColor) > 0.6 ? '#1d2430' : '#fff');
+  document.documentElement.style.setProperty('--headband', /^#[0-9a-f]{6}$/i.test(state.meta.headbandColor || '') ? state.meta.headbandColor : '#ffffff');
   document.documentElement.style.setProperty('--endpaper', mix(state.coverColor, '#f4efe4', 0.9));
 
   if (state.flip) { try { state.flip.destroy(); } catch {} state.flip = null; }
@@ -485,7 +679,7 @@ function spreadLabel() {
   const nums = labels.filter((p) => p.pdfPage).map((p) => p.pdfPage);
   if (nums.length === 2) return `Pagina ${nums[0]}–${nums[1]} van ${state.pdfPageCount}`;
   if (nums.length === 1 && !labels.some((p) => p.role === 'front' || p.role === 'back')) return `Pagina ${nums[0]} van ${state.pdfPageCount}`;
-  return labels.map(pageLabel).join(' · ');
+  return [...new Set(labels.map(pageLabel))].join(' · ');
 }
 
 // ---------- Papierblok, kaft, rug ----------
@@ -553,7 +747,13 @@ function updateDecor() {
     const j = (joint / w) * 100;
     sm.style.background = `linear-gradient(90deg, ${mid} 0, ${dark} ${j * 0.6}%, ${mid} ${j}%, ${light} 50%, ${mid} ${100 - j}%, ${dark} ${100 - j * 0.6}%, ${mid} 100%)`;
     // De rug ligt iets hoger dan de borden (hij buigt om het papierblok heen) en blijft daardoor boven en onder zichtbaar.
-    place(sm, rect.left + pw - w / 2, rect.top - ov * 1.3 + Math.min(depth, ov) * 0.3, w, h + ov * 2.6);
+    const smTop = rect.top - ov * 1.3 + Math.min(depth, ov) * 0.3;
+    place(sm, rect.left + pw - w / 2, smTop, w, h + ov * 2.6);
+    // Kapitaalbandjes: net boven en onder het papierblok, tussen de groeven.
+    const hb = Math.max(2.5, 2 * pxPerMm);
+    sm.style.setProperty('--joint', joint + 'px');
+    sm.style.setProperty('--hb', hb + 'px');
+    sm.style.setProperty('--hb-top', rect.top - smTop - hb + 'px');
     sm.style.display = 'block';
   } else sm.style.display = 'none';
 
@@ -598,6 +798,11 @@ function edgeShadows(layers, dir, drop) {
     out.push(`${(dir * (d * 0.4 + 10)).toFixed(1)}px ${(d * 0.85 + 18).toFixed(1)}px 40px rgba(0,0,0,.25)`);
   }
   return out.join(', ') || 'none';
+}
+
+function luminance(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
 }
 
 function shade(hex, amt) {
@@ -904,17 +1109,7 @@ function setupUi() {
     if (state.mode === 'local' && e.dataTransfer.files[0]) openLocalFile(e.dataTransfer.files[0]);
   });
 
-  $('bindingSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('button')?.dataset.binding;
-    if (!b || b === state.binding || !state.flip) return;
-    const cur = state.pages[state.flip.getCurrentPageIndex()];
-    state.binding = b;
-    buildPageList();
-    updateBindingButtons();
-    let i = cur.pdfPage ? state.pages.findIndex((p) => p.pdfPage === cur.pdfPage) : state.pages.findIndex((p) => p.role && p.role === cur.role);
-    if (i < 0) i = 0;
-    build(i);
-  });
+  $('bindingSeg').addEventListener('click', (e) => switchBinding(e.target.closest('button')?.dataset.binding));
 
   setEnv('studio'); // het boek start altijd op een lichte achtergrond
   $('envGroup').addEventListener('click', (e) => {

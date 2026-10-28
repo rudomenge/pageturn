@@ -4,10 +4,13 @@
 //   books/<id>/meta.json
 //   books/<id>/comments/<tijdstip>_<cid>.json   (één object per opmerking, dus geen schrijfconflicten)
 //   books/<id>/cover.pdf                          (losse omslag, optioneel)
+//   books/<id>/endpaper.pdf                       (schutblad, optioneel)
 //   books/<id>/cover.jpg                          (voorkant als plaatje voor de 3D-thumbnail)
 
 const BINDINGS = ['hardcover', 'softcover', 'magazine'];
 const COVER_MODES = ['outer', 'full', 'none'];
+// Pdf-bestanden per boek: [bestandsnaam in R2, veld in meta.json]
+const EXTRA_PDFS = { pdf: ['book.pdf', null], coverpdf: ['cover.pdf', 'coverPdf'], endpaperpdf: ['endpaper.pdf', 'endpaperPdf'] };
 const MAX_COMMENTS = 1000; // R2 list geeft maximaal 1000 sleutels per keer
 
 const validId = (id) => /^[a-z0-9]{10,32}$/.test(id);
@@ -17,8 +20,8 @@ const err = (status, error) => json({ error }, status);
 const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, paperGsm, paperType, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, endpaperPdf, paperGsm, paperType, headbandColor, createdAt };
 }
 
 function cleanSettings(body, meta) {
@@ -27,6 +30,7 @@ function cleanSettings(body, meta) {
   if (BINDINGS.includes(body.binding)) out.binding = body.binding;
   if (typeof body.coverColor === 'string' && /^(#[0-9a-f]{6}|auto)$/i.test(body.coverColor)) out.coverColor = body.coverColor;
   if (COVER_MODES.includes(body.coverMode)) out.coverMode = body.coverMode;
+  if (typeof body.headbandColor === 'string' && /^#[0-9a-f]{6}$/i.test(body.headbandColor)) out.headbandColor = body.headbandColor;
   const ps = typeof body.pageSize === 'string' ? safeJson(body.pageSize) : body.pageSize;
   if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
     out.pageSize = { widthMm: Math.round(+ps.widthMm * 10) / 10, heightMm: Math.round(+ps.heightMm * 10) / 10 };
@@ -144,7 +148,7 @@ async function servePdf(request, env, meta, download, file = 'book.pdf') {
   const range = request.headers.get('Range');
   const obj = range ? await env.BOOKS.get(key, { range: request.headers }) : await env.BOOKS.get(key);
   if (!obj) return err(404, 'PDF niet gevonden');
-  const name = (meta.title || 'boek').replace(/[^\w\- .]/g, '_') + (file === 'cover.pdf' ? ' omslag' : '') + '.pdf';
+  const name = (meta.title || 'boek').replace(/[^\w\- .]/g, '_') + (file === 'cover.pdf' ? ' omslag' : file === 'endpaper.pdf' ? ' schutblad' : '') + '.pdf';
   const headers = new Headers({
     'Content-Type': 'application/pdf',
     'Accept-Ranges': 'bytes',
@@ -256,16 +260,18 @@ async function handle(request, env) {
         return json({ ok: true });
       }
     }
-    // Binnenwerk vervangen of een losse omslag toevoegen. Deellink, opmerkingen en bezoeken blijven.
-    if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/(pdf|coverpdf)$/)) && (method === 'PUT' || method === 'DELETE')) {
+    // Binnenwerk vervangen of een losse omslag/schutblad toevoegen. Deellink, opmerkingen en bezoeken blijven.
+    if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/(pdf|coverpdf|endpaperpdf)$/)) && (method === 'PUT' || method === 'DELETE')) {
       const meta = await loadBook(env, m[1]);
       if (!meta) return err(404, 'Boek niet gevonden');
-      const isCover = m[2] === 'coverpdf';
-      const key = `books/${meta.id}/${isCover ? 'cover.pdf' : 'book.pdf'}`;
+      const [file, field] = EXTRA_PDFS[m[2]];
+      const key = `books/${meta.id}/${file}`;
+      // De thumbnail wordt daarna opnieuw gemaakt door de beheerpagina.
+      if (m[2] !== 'endpaperpdf') delete meta.coverVersion;
       if (method === 'DELETE') {
-        if (!isCover) return err(405, 'Het binnenwerk kan alleen vervangen worden');
+        if (!field) return err(405, 'Het binnenwerk kan alleen vervangen worden');
         await env.BOOKS.delete(key);
-        delete meta.coverPdf;
+        delete meta[field];
       } else {
         const len = Number(request.headers.get('Content-Length') || 0);
         if (!request.body || !len) return err(400, 'Geen PDF ontvangen');
@@ -274,8 +280,8 @@ async function handle(request, env) {
         const head = await env.BOOKS.head(key);
         const pageCount = Number.isInteger(+q.pageCount) && +q.pageCount > 0 ? +q.pageCount : null;
         const fileName = String(q.fileName || 'boek.pdf').slice(0, 200);
-        if (isCover) {
-          meta.coverPdf = { fileName, pageCount, trim: cleanTrim(q.trim), size: head ? head.size : len, version: Date.now() };
+        if (field) {
+          meta[field] = { fileName, pageCount, trim: cleanTrim(q.trim), size: head ? head.size : len, version: Date.now() };
         } else {
           Object.assign(meta, { fileName, pageCount, trim: cleanTrim(q.trim), size: head ? head.size : len, pdfVersion: Date.now() });
           const ps = cleanSettings({ pageSize: q.pageSize }, meta).pageSize;
@@ -357,10 +363,11 @@ async function handle(request, env) {
     });
   }
 
-  if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)\/coverpdf$/)) && (method === 'GET' || method === 'HEAD')) {
+  if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)\/(coverpdf|endpaperpdf)$/)) && (method === 'GET' || method === 'HEAD')) {
     const meta = await loadBook(env, m[1]);
-    if (!meta || !meta.coverPdf) return err(404, 'Geen losse omslag');
-    return servePdf(request, env, meta, false, 'cover.pdf');
+    const [file, field] = EXTRA_PDFS[m[2]];
+    if (!meta || !meta[field]) return err(404, 'Bestand niet gevonden');
+    return servePdf(request, env, meta, false, file);
   }
 
   if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)(\/pdf|\/comments)?$/))) {
