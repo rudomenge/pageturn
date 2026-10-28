@@ -3,6 +3,7 @@
 //   books/<id>/book.pdf
 //   books/<id>/meta.json
 //   books/<id>/comments/<tijdstip>_<cid>.json   (één object per opmerking, dus geen schrijfconflicten)
+//   books/<id>/cover.pdf                          (losse omslag, optioneel)
 //   books/<id>/cover.jpg                          (voorkant als plaatje voor de 3D-thumbnail)
 
 const BINDINGS = ['hardcover', 'softcover', 'magazine'];
@@ -16,8 +17,8 @@ const err = (status, error) => json({ error }, status);
 const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt };
 }
 
 function cleanSettings(body, meta) {
@@ -131,14 +132,14 @@ async function deletePrefix(env, prefix) {
 }
 
 // PDF serveren met Range-ondersteuning, zodat pdf.js grote bestanden per stuk kan laden.
-async function servePdf(request, env, meta, download) {
-  const key = `books/${meta.id}/book.pdf`;
+async function servePdf(request, env, meta, download, file = 'book.pdf') {
+  const key = `books/${meta.id}/${file}`;
   const head = await env.BOOKS.head(key);
   if (!head) return err(404, 'PDF niet gevonden');
   const range = request.headers.get('Range');
   const obj = range ? await env.BOOKS.get(key, { range: request.headers }) : await env.BOOKS.get(key);
   if (!obj) return err(404, 'PDF niet gevonden');
-  const name = (meta.title || 'boek').replace(/[^\w\- .]/g, '_') + '.pdf';
+  const name = (meta.title || 'boek').replace(/[^\w\- .]/g, '_') + (file === 'cover.pdf' ? ' omslag' : '') + '.pdf';
   const headers = new Headers({
     'Content-Type': 'application/pdf',
     'Accept-Ranges': 'bytes',
@@ -250,6 +251,36 @@ async function handle(request, env) {
         return json({ ok: true });
       }
     }
+    // Binnenwerk vervangen of een losse omslag toevoegen. Deellink, opmerkingen en bezoeken blijven.
+    if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/(pdf|coverpdf)$/)) && (method === 'PUT' || method === 'DELETE')) {
+      const meta = await loadBook(env, m[1]);
+      if (!meta) return err(404, 'Boek niet gevonden');
+      const isCover = m[2] === 'coverpdf';
+      const key = `books/${meta.id}/${isCover ? 'cover.pdf' : 'book.pdf'}`;
+      if (method === 'DELETE') {
+        if (!isCover) return err(405, 'Het binnenwerk kan alleen vervangen worden');
+        await env.BOOKS.delete(key);
+        delete meta.coverPdf;
+      } else {
+        const len = Number(request.headers.get('Content-Length') || 0);
+        if (!request.body || !len) return err(400, 'Geen PDF ontvangen');
+        const q = Object.fromEntries(url.searchParams);
+        await env.BOOKS.put(key, request.body, { httpMetadata: { contentType: 'application/pdf' } });
+        const head = await env.BOOKS.head(key);
+        const pageCount = Number.isInteger(+q.pageCount) && +q.pageCount > 0 ? +q.pageCount : null;
+        const fileName = String(q.fileName || 'boek.pdf').slice(0, 200);
+        if (isCover) {
+          meta.coverPdf = { fileName, pageCount, trim: cleanTrim(q.trim), size: head ? head.size : len, version: Date.now() };
+        } else {
+          Object.assign(meta, { fileName, pageCount, trim: cleanTrim(q.trim), size: head ? head.size : len, pdfVersion: Date.now() });
+          const ps = cleanSettings({ pageSize: q.pageSize }, meta).pageSize;
+          if (ps) meta.pageSize = ps;
+        }
+      }
+      await env.BOOKS.put(`books/${meta.id}/meta.json`, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' } });
+      return json(meta);
+    }
+
     // Voorkant als JPEG, gemaakt in de browser van de beheerder.
     if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/cover$/)) && method === 'PUT') {
       const meta = await loadBook(env, m[1]);
@@ -319,6 +350,12 @@ async function handle(request, env) {
     return new Response(method === 'HEAD' ? null : obj.body, {
       headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=300', ETag: obj.httpEtag },
     });
+  }
+
+  if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)\/coverpdf$/)) && (method === 'GET' || method === 'HEAD')) {
+    const meta = await loadBook(env, m[1]);
+    if (!meta || !meta.coverPdf) return err(404, 'Geen losse omslag');
+    return servePdf(request, env, meta, false, 'cover.pdf');
   }
 
   if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)(\/pdf|\/comments)?$/))) {

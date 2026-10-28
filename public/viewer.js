@@ -19,6 +19,8 @@ const state = {
   bookId: null,
   meta: { title: 'Bladerboek', binding: 'hardcover', coverMode: 'outer', coverColor: 'auto', allowDownload: true, allowComments: true, allowBindingSwitch: true },
   pdf: null,
+  coverPdf: null, // losse omslag-PDF (optioneel)
+  coverTrim: null,
   pdfPageCount: 0,
   pageMm: { w: 210, h: 297 },
   trimInset: null, // { left, top, right, bottom } in pt t.o.v. de zichtbare pagina
@@ -26,7 +28,7 @@ const state = {
   coverColor: '#2b3a55',
   pages: [], // beschrijving van elke bladerpagina
   innerCount: 0,
-  images: new Map(), // pdf-paginanummer -> blob-URL
+  images: new Map(), // imgKey(pagina) -> blob-URL
   queue: new Set(),
   rendering: false,
   renderHeight: 1600,
@@ -61,7 +63,8 @@ async function init() {
       return showError('Dit boek kon niet worden geladen.');
     }
     state.downloadUrl = `/api/books/${state.bookId}/pdf?download=1`;
-    await openPdf({ url: `/api/books/${state.bookId}/pdf` });
+    const v = state.meta.pdfVersion ? `?v=${state.meta.pdfVersion}` : '';
+    await openPdf({ url: `/api/books/${state.bookId}/pdf${v}` });
   } else {
     $('dropzone').hidden = false;
     const url = new URLSearchParams(location.search).get('pdf');
@@ -125,6 +128,15 @@ async function openPdf(src) {
     return showError('Deze PDF kon niet worden geopend.');
   }
   state.pdfPageCount = state.pdf.numPages;
+  if (state.coverPdf) { state.coverPdf.destroy(); state.coverPdf = null; }
+  if (state.mode === 'server' && state.meta.coverPdf) {
+    try {
+      state.coverPdf = await pdfjsLib.getDocument({ url: `/api/books/${state.bookId}/coverpdf?v=${state.meta.coverPdf.version}`, isEvalSupported: false }).promise;
+      state.coverTrim = state.meta.coverPdf.trim;
+    } catch (e) {
+      console.error(e);
+    }
+  }
   if (state.mode === 'server' && state.meta.trim) state.trimInset = state.meta.trim;
 
   const first = await state.pdf.getPage(1);
@@ -134,6 +146,14 @@ async function openPdf(src) {
   if (first.rotate % 180) [wPt, hPt] = [hPt, wPt];
   state.pageMm = { w: wPt * PT_TO_MM, h: hPt * PT_TO_MM };
   state.aspect = wPt / hPt;
+  state.coverSpread = false;
+  if (state.coverPdf) {
+    const cp = await state.coverPdf.getPage(1);
+    const ct = state.coverTrim || { left: 0, top: 0, right: 0, bottom: 0 };
+    let cw = cp.view[2] - cp.view[0] - ct.left - ct.right, ch = cp.view[3] - cp.view[1] - ct.top - ct.bottom;
+    if (cp.rotate % 180) [cw, ch] = [ch, cw];
+    state.coverSpread = cw / ch > state.aspect * 1.4;
+  }
   state.renderHeight = Math.round(Math.min(2200, Math.max(1000, window.innerHeight * (window.devicePixelRatio || 1) * 1.1)));
 
   document.title = state.meta.title || 'Bladerboek';
@@ -145,13 +165,13 @@ async function openPdf(src) {
   // Eerst de omslag en de eerste pagina's renderen, de rest volgt op de achtergrond.
   state.binding = state.meta.binding in BINDINGS ? state.meta.binding : 'hardcover';
   buildPageList();
-  const firstPdfPages = state.pages.slice(0, 5).filter((p) => p.pdfPage).map((p) => p.pdfPage);
-  for (let i = 0; i < firstPdfPages.length; i++) {
-    await renderPdfPage(firstPdfPages[i]);
-    setLoading('Pagina\'s worden voorbereid…', 0.3 + (0.6 * (i + 1)) / firstPdfPages.length);
+  const firstPages = state.pages.slice(0, 5).filter(imgKey);
+  for (let i = 0; i < firstPages.length; i++) {
+    await renderPage(firstPages[i]);
+    setLoading('Pagina\'s worden voorbereid…', 0.3 + (0.6 * (i + 1)) / firstPages.length);
   }
-  if ((!state.meta.coverColor || state.meta.coverColor === 'auto') && state.pages[0].pdfPage) {
-    state.coverColor = await sampleCoverColor(state.images.get(state.pages[0].pdfPage));
+  if ((!state.meta.coverColor || state.meta.coverColor === 'auto') && imgKey(state.pages[0])) {
+    state.coverColor = await sampleCoverColor(state.images.get(imgKey(state.pages[0])));
   }
   $('loading').hidden = true;
   $('navbar').hidden = false;
@@ -187,7 +207,16 @@ function buildPageList() {
 
   let front, insideFront, inner, insideBack, back;
   const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, k) => pdf(a + k));
-  if (mode === 'full') {
+  if (state.coverPdf) {
+    // Losse omslag: de PDF van het boek is dan helemaal binnenwerk.
+    const c = state.coverPdf.numPages;
+    const cov = (i, part) => ({ kind: 'pdf', coverPage: i, part });
+    inner = range(1, n);
+    [insideFront, insideBack] = [inside(), inside()];
+    if (state.coverSpread) [front, back] = [cov(1, 'front'), cov(1, 'back')];
+    else if (c >= 4) [front, insideFront, insideBack, back] = [cov(1), cov(2), cov(c - 1), cov(c)];
+    else [front, back] = [cov(1), c > 1 ? cov(c) : { kind: 'cover' }];
+  } else if (mode === 'full') {
     [front, insideFront, inner, insideBack, back] = [pdf(1), pdf(2), range(3, n - 2), pdf(n - 1), pdf(n)];
   } else if (mode === 'outer') {
     [front, insideFront, inner, insideBack, back] = [pdf(1), inside(), range(2, n - 1), inside(), pdf(n)];
@@ -212,29 +241,40 @@ function pageLabel(p) {
 }
 
 // ---------- PDF renderen ----------
-async function renderPdfPage(num) {
-  if (state.images.has(num)) return state.images.get(num);
-  const page = await state.pdf.getPage(num);
+// Sleutel van het plaatje van een bladerpagina: '12' (binnenwerk) of 'c1front' (losse omslag).
+function imgKey(p) {
+  if (p.coverPage) return `c${p.coverPage}${p.part || ''}`;
+  return p.pdfPage ? String(p.pdfPage) : null;
+}
+
+async function renderPage(p) {
+  const key = imgKey(p);
+  if (state.images.has(key)) return state.images.get(key);
+  const doc = p.coverPage ? state.coverPdf : state.pdf;
+  const page = await doc.getPage(p.coverPage || p.pdfPage);
   const base = page.getViewport({ scale: 1 });
-  const t = state.trimInset || { left: 0, top: 0, right: 0, bottom: 0 };
+  const t = (p.coverPage ? state.coverTrim : state.trimInset) || { left: 0, top: 0, right: 0, bottom: 0 };
   const rotated = page.rotate % 180 !== 0;
   const trimW = rotated ? base.width - t.top - t.bottom : base.width - t.left - t.right;
   const trimH = rotated ? base.height - t.left - t.right : base.height - t.top - t.bottom;
+  // Bij een omslag als spread (achterkant, rug, voorkant) snijden we de voor- of achterkant eruit.
+  const partW = p.part ? Math.min(trimW, trimH * state.aspect) : trimW;
+  const partX = p.part === 'front' ? trimW - partW : 0;
   const scale = state.renderHeight / trimH;
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(trimW * scale);
+  canvas.width = Math.round(partW * scale);
   canvas.height = Math.round(trimH * scale);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const offX = (rotated ? t.bottom : t.left) * scale, offY = (rotated ? t.left : t.top) * scale;
+  const offX = ((rotated ? t.bottom : t.left) + partX) * scale, offY = (rotated ? t.left : t.top) * scale;
   await page.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -offX, -offY] }).promise;
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.88));
   const url = URL.createObjectURL(blob);
-  state.images.set(num, url);
+  state.images.set(key, url);
   page.cleanup();
-  document.querySelectorAll(`img[data-pdf="${num}"]`).forEach((img) => {
+  document.querySelectorAll(`img[data-key="${key}"]`).forEach((img) => {
     img.src = url;
     img.parentElement.classList.remove('loading-page');
   });
@@ -250,13 +290,14 @@ async function pumpQueue() {
       const cur = state.flip ? state.flip.getCurrentPageIndex() : 0;
       let best = null, bestD = Infinity;
       state.pages.forEach((p, i) => {
-        if (p.pdfPage && !state.images.has(p.pdfPage)) {
+        const key = imgKey(p);
+        if (key && !state.images.has(key)) {
           const d = Math.abs(i - cur) + (i < cur ? 0.5 : 0);
-          if (d < bestD) { bestD = d; best = p.pdfPage; }
+          if (d < bestD) { bestD = d; best = p; }
         }
       });
       if (best == null) break;
-      await renderPdfPage(best);
+      await renderPage(best);
     }
   } catch (e) {
     console.error(e);
@@ -334,10 +375,10 @@ function build(startIndex) {
     if (hard && p.role) el.dataset.density = 'hard';
     if (p.kind === 'pdf') {
       const img = document.createElement('img');
-      img.dataset.pdf = p.pdfPage;
+      img.dataset.key = imgKey(p);
       img.alt = pageLabel(p);
       img.draggable = false;
-      const url = state.images.get(p.pdfPage);
+      const url = state.images.get(imgKey(p));
       if (url) img.src = url; else el.classList.add('loading-page');
       el.appendChild(img);
     } else if (p.kind === 'cover') {

@@ -40,8 +40,8 @@ function loadBook(id) {
   return meta && fs.existsSync(path.join(bookDir(id), 'book.pdf')) ? meta : null;
 }
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, pdfVersion, coverPdf, createdAt };
 }
 function cleanSettings(body, meta) {
   const out = {};
@@ -103,24 +103,28 @@ async function inspectPdf(file) {
 }
 
 // Upload: het PDF-bestand is de body, de instellingen staan in de querystring (zelfde API als de Cloudflare-versie).
+function receiveFile(req, file) {
+  return new Promise((resolve, reject) => {
+    const out = fs.createWriteStream(file);
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > 300 * 1024 * 1024) { req.destroy(); reject(new Error('Bestand te groot')); }
+    });
+    req.pipe(out);
+    out.on('finish', resolve);
+    out.on('error', reject);
+    req.on('error', reject);
+  });
+}
+
 app.put('/api/admin/books', requireAdmin, async (req, res) => {
   const id = crypto.randomBytes(8).toString('hex');
   const dir = bookDir(id);
   const file = path.join(dir, 'book.pdf');
   fs.mkdirSync(dir, { recursive: true });
   try {
-    await new Promise((resolve, reject) => {
-      const out = fs.createWriteStream(file);
-      let size = 0;
-      req.on('data', (chunk) => {
-        size += chunk.length;
-        if (size > 300 * 1024 * 1024) { req.destroy(); reject(new Error('Bestand te groot')); }
-      });
-      req.pipe(out);
-      out.on('finish', resolve);
-      out.on('error', reject);
-      req.on('error', reject);
-    });
+    await receiveFile(req, file);
   } catch (e) {
     fs.rmSync(dir, { recursive: true, force: true });
     return res.status(400).json({ error: e.message });
@@ -153,6 +157,48 @@ app.put('/api/admin/books', requireAdmin, async (req, res) => {
   writeJson(path.join(dir, 'meta.json'), meta);
   writeJson(path.join(dir, 'comments.json'), []);
   res.json(meta);
+});
+
+// Binnenwerk vervangen of een losse omslag toevoegen. Deellink, opmerkingen en bezoeken blijven.
+app.put('/api/admin/books/:id/:which(pdf|coverpdf)', requireAdmin, async (req, res) => {
+  const meta = loadBook(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'Boek niet gevonden' });
+  const isCover = req.params.which === 'coverpdf';
+  const file = path.join(bookDir(meta.id), isCover ? 'cover.pdf' : 'book.pdf');
+  const tmp = file + '.upload';
+  let info;
+  try {
+    await receiveFile(req, tmp);
+    info = await inspectPdf(tmp);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    return res.status(400).json({ error: 'Dit bestand is geen leesbare PDF' });
+  }
+  fs.renameSync(tmp, file);
+  const fileName = String(req.query.fileName || 'boek.pdf').slice(0, 200);
+  const size = fs.statSync(file).size;
+  if (isCover) meta.coverPdf = { fileName, pageCount: info.pageCount, trim: info.trim, size, version: Date.now() };
+  else {
+    Object.assign(meta, { fileName, pageCount: info.pageCount, trim: info.trim, size, pdfVersion: Date.now() });
+    const ps = cleanSettings({ pageSize: req.query.pageSize }, meta).pageSize;
+    if (ps) meta.pageSize = ps;
+  }
+  writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
+  res.json(meta);
+});
+app.delete('/api/admin/books/:id/coverpdf', requireAdmin, (req, res) => {
+  const meta = loadBook(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'Boek niet gevonden' });
+  fs.rmSync(path.join(bookDir(meta.id), 'cover.pdf'), { force: true });
+  delete meta.coverPdf;
+  writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
+  res.json(meta);
+});
+app.get('/api/books/:id/coverpdf', (req, res) => {
+  const meta = loadBook(req.params.id);
+  if (!meta || !meta.coverPdf) return res.status(404).end();
+  res.set('Content-Type', 'application/pdf');
+  res.sendFile(path.join(bookDir(meta.id), 'cover.pdf'));
 });
 
 app.patch('/api/admin/books/:id', requireAdmin, (req, res) => {

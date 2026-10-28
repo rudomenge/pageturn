@@ -17,6 +17,7 @@
     -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01";
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { background: var(--bg); }
   body { margin: 0; min-height: 100vh; background: var(--bg); }
   body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background:
@@ -244,7 +245,7 @@ async function loadPdfjs() {
 }
 
 // Formaat (bijgesneden, in mm) en een JPEG van pagina 1 voor de 3D-thumbnail.
-async function makeCover(src, trim, withImage) {
+async function makeCover(src, trim, withImage, frontAspect) {
   const lib = await loadPdfjs();
   const pdf = await lib.getDocument({ ...src, isEvalSupported: false }).promise;
   try {
@@ -256,14 +257,16 @@ async function makeCover(src, trim, withImage) {
     const trimH = rotated ? base.height - t.left - t.right : base.height - t.top - t.bottom;
     const pageSize = { widthMm: trimW * PT_TO_MM, heightMm: trimH * PT_TO_MM };
     if (!withImage) return { pageSize };
-    const scale = 720 / Math.max(trimW, trimH);
+    // Losse omslag als spread (achterkant, rug, voorkant): alleen het rechterdeel is de voorkant.
+    const partW = frontAspect && trimW / trimH > frontAspect * 1.4 ? trimH * frontAspect : trimW;
+    const scale = 720 / Math.max(partW, trimH);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(trimW * scale);
+    canvas.width = Math.round(partW * scale);
     canvas.height = Math.round(trimH * scale);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const offX = (rotated ? t.bottom : t.left) * scale, offY = (rotated ? t.left : t.top) * scale;
+    const offX = ((rotated ? t.bottom : t.left) + trimW - partW) * scale, offY = (rotated ? t.left : t.top) * scale;
     await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale }), transform: [1, 0, 0, 1, -offX, -offY] }).promise;
     const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.86));
     return { pageSize, blob };
@@ -272,8 +275,8 @@ async function makeCover(src, trim, withImage) {
   }
 }
 
-async function saveCover(id, cover) {
-  let meta = await api(`/api/admin/books/${id}`, { method: 'PATCH', body: JSON.stringify({ pageSize: cover.pageSize }) });
+async function saveCover(id, cover, keepSize) {
+  let meta = keepSize ? null : await api(`/api/admin/books/${id}`, { method: 'PATCH', body: JSON.stringify({ pageSize: cover.pageSize }) });
   if (cover.blob) meta = await api(`/api/admin/books/${id}/cover`, { method: 'PUT', body: cover.blob, headers: { 'Content-Type': 'image/jpeg' } });
   return meta;
 }
@@ -304,8 +307,9 @@ async function edgeColor(url) {
   return p;
 }
 
-const coverUrl = (b) => (b.coverVersion && b.coverMode !== 'none' ? `/api/books/${b.id}/cover?v=${b.coverVersion}` : null);
-const needsCover = (b) => !b.pageSize || (b.coverMode !== 'none' && !b.coverVersion);
+const hasFront = (b) => b.coverMode !== 'none' || !!b.coverPdf;
+const coverUrl = (b) => (b.coverVersion && hasFront(b) ? `/api/books/${b.id}/cover?v=${b.coverVersion}` : null);
+const needsCover = (b) => !b.pageSize || (hasFront(b) && !b.coverVersion);
 
 async function drawThumb(el, b, box) {
   const url = coverUrl(b);
@@ -325,37 +329,52 @@ function describe(b) {
 
 function setStatus(text) { $('status').textContent = text; }
 
-async function upload(file) {
-  if (!file) return;
-  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return setStatus('Kies een PDF-bestand.');
-  if (file.size > MAX_UPLOAD_MB * 1048576) return setStatus(`Dit bestand is ${(file.size / 1048576).toFixed(0)} MB. Het maximum is ${MAX_UPLOAD_MB} MB; exporteer de PDF eventueel met iets lagere beeldkwaliteit.`);
-  setStatus('PDF wordt gecontroleerd…');
+// PDF als ruwe body versturen, met voortgang.
+function putPdf(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => onProgress && onProgress(e.loaded / e.total);
+    xhr.onload = () => (xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error((() => { try { return JSON.parse(xhr.responseText).error; } catch { return xhr.statusText; } })())));
+    xhr.onerror = () => reject(new Error('Controleer je verbinding en probeer het opnieuw.'));
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.send(file);
+  });
+}
+
+// Eerst controleren: is het een PDF, past hij, en wat zijn paginatal, afloop en formaat.
+async function readPdfFile(file) {
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') throw new Error('Kies een PDF-bestand.');
+  if (file.size > MAX_UPLOAD_MB * 1048576) throw new Error(`Dit bestand is ${(file.size / 1048576).toFixed(0)} MB. Het maximum is ${MAX_UPLOAD_MB} MB; exporteer de PDF eventueel met iets lagere beeldkwaliteit.`);
   const buf = await file.arrayBuffer();
   const info = await inspectPdf(buf.slice(0));
-  if (!info) return setStatus('Dit bestand kon niet als PDF worden gelezen.');
-  const coverMode = $('newCover').value;
-  const cover = await makeCover({ data: new Uint8Array(buf.slice(0)) }, info.trim, coverMode !== 'none').catch(() => null);
-  const q = new URLSearchParams({ fileName: file.name, binding: $('newBinding').value, coverMode, pageCount: String(info.pageCount) });
-  if (info.trim) q.set('trim', JSON.stringify(info.trim));
-  if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
-  const xhr = new XMLHttpRequest();
+  if (!info) throw new Error('Dit bestand kon niet als PDF worden gelezen.');
+  return { buf, info };
+}
+
+async function upload(file) {
+  if (!file) return;
   const bar = $('progress');
-  bar.style.display = 'block';
-  bar.firstElementChild.style.width = '0';
-  setStatus('Uploaden…');
-  xhr.upload.onprogress = (e) => { bar.firstElementChild.style.width = (e.loaded / e.total) * 100 + '%'; };
-  xhr.onload = async () => {
-    bar.style.display = 'none';
-    if (xhr.status >= 300) return setStatus('Uploaden mislukt: ' + xhr.responseText);
-    const meta = JSON.parse(xhr.responseText);
+  try {
+    setStatus('PDF wordt gecontroleerd…');
+    const { buf, info } = await readPdfFile(file);
+    const coverMode = $('newCover').value;
+    const cover = await makeCover({ data: new Uint8Array(buf.slice(0)) }, info.trim, coverMode !== 'none').catch(() => null);
+    const q = new URLSearchParams({ fileName: file.name, binding: $('newBinding').value, coverMode, pageCount: String(info.pageCount) });
+    if (info.trim) q.set('trim', JSON.stringify(info.trim));
+    if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
+    bar.style.display = 'block';
+    bar.firstElementChild.style.width = '0';
+    setStatus('Uploaden…');
+    const meta = await putPdf('/api/admin/books?' + q, file, (f) => { bar.firstElementChild.style.width = f * 100 + '%'; });
     if (cover?.blob) await api(`/api/admin/books/${meta.id}/cover`, { method: 'PUT', body: cover.blob, headers: { 'Content-Type': 'image/jpeg' } }).catch(() => {});
     setStatus(`"${file.name}" staat klaar. Kopieer de link via het boek hieronder.`);
     load();
-  };
-  xhr.onerror = () => { bar.style.display = 'none'; setStatus('Uploaden mislukt. Controleer je verbinding en probeer het opnieuw.'); };
-  xhr.open('PUT', '/api/admin/books?' + q);
-  xhr.setRequestHeader('Content-Type', 'application/pdf');
-  xhr.send(file);
+  } catch (e) {
+    setStatus(e.message.startsWith('Kies') || e.message.startsWith('Dit') ? e.message : 'Uploaden mislukt: ' + e.message);
+  } finally {
+    bar.style.display = 'none';
+  }
 }
 
 for (const id of ['file', 'file2']) $(id).addEventListener('change', (e) => { upload(e.target.files[0]); e.target.value = ''; });
@@ -389,8 +408,16 @@ async function load() {
 
 async function refreshCover(entry) {
   const b = entry.meta;
-  const cover = await makeCover({ url: `/api/books/${b.id}/pdf` }, b.trim, b.coverMode !== 'none');
-  entry.meta = await saveCover(b.id, cover);
+  const v = b.pdfVersion ? `?v=${b.pdfVersion}` : '';
+  if (!b.pageSize || !b.coverPdf) {
+    const cover = await makeCover({ url: `/api/books/${b.id}/pdf${v}` }, b.trim, !b.coverPdf && b.coverMode !== 'none');
+    entry.meta = await saveCover(b.id, cover);
+  }
+  if (entry.meta.coverPdf) {
+    const aspect = entry.meta.pageSize ? entry.meta.pageSize.widthMm / entry.meta.pageSize.heightMm : null;
+    const cover = await makeCover({ url: `/api/books/${b.id}/coverpdf?v=${entry.meta.coverPdf.version}` }, entry.meta.coverPdf.trim, true, aspect);
+    entry.meta = await saveCover(b.id, cover, true);
+  }
   redraw(entry);
 }
 
@@ -483,7 +510,7 @@ function openDrawer(entry) {
           <label class="f">Uitvoering <select class="field" data-k="binding">
             ${Object.entries(BINDINGS).map(([v, x]) => `<option value="${v}" ${b.binding === v ? 'selected' : ''}>${x.label}</option>`).join('')}
           </select></label>
-          <label class="f">Omslag <select class="field" data-k="coverMode">
+          <label class="f" ${b.coverPdf ? 'hidden' : ''}>Omslag <select class="field" data-k="coverMode">
             <option value="outer" ${b.coverMode === 'outer' ? 'selected' : ''}>Eerste en laatste pagina</option>
             <option value="full" ${b.coverMode === 'full' ? 'selected' : ''}>Incl. binnenkant omslag</option>
             <option value="none" ${b.coverMode === 'none' ? 'selected' : ''}>Geen omslag in PDF</option>
@@ -495,6 +522,7 @@ function openDrawer(entry) {
         </div>
         <div class="meta" data-spine style="margin-top:10px"></div>
       </div>
+      <div class="d-sec" data-files></div>
       <div class="d-sec">
         <h4>Voor de klant</h4>
         ${sw('allowDownload', b.allowDownload, 'PDF downloaden toestaan')}
@@ -510,6 +538,7 @@ function openDrawer(entry) {
     </div>`;
   drawThumb(drawer.querySelector('.mini > div'), b, [62, 72]);
   spineLine(b);
+  fillFiles(entry);
   fillDrawerLists(entry);
 
   drawer.querySelector('[data-act=close]').onclick = closeDrawer;
@@ -541,6 +570,61 @@ function openDrawer(entry) {
   drawer.classList.add('open');
   $('scrim').classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
+}
+
+const fileRow = (name, sub, buttons) => `<div class="row"><div class="grow"><div>${name}</div><div class="sub">${sub}</div></div><div class="acts">${buttons}</div></div>`;
+const pickBtn = (act, label) => `<label class="btn sm">${label}<input type="file" data-file="${act}" accept="application/pdf,.pdf" hidden></label>`;
+
+function fillFiles(entry) {
+  const b = entry.meta, el = drawer.querySelector('[data-files]');
+  if (!el) return;
+  const c = b.coverPdf;
+  el.innerHTML = `<h4>Bestanden</h4>
+    ${fileRow('Binnenwerk', `${esc(b.fileName || 'boek.pdf')} · ${b.pageCount || '?'} pagina's${b.pdfVersion ? ' · vervangen ' + esc(fmtDay(new Date(b.pdfVersion).toISOString())) : ''}`, pickBtn('pdf', 'Vervangen'))}
+    ${c ? fileRow('Omslag', `${esc(c.fileName)} · ${c.pageCount || '?'} ${c.pageCount === 1 ? 'pagina' : "pagina's"}`, pickBtn('coverpdf', 'Vervangen') + '<button class="btn ghost sm danger" data-act="rmcover" aria-label="Omslag verwijderen">✕</button>')
+      : fileRow('Omslag', 'Nog geen losse omslag. Eén spread (achterkant, rug, voorkant), of losse pagina\'s: voor- en achterkant, of 4 pagina\'s met de binnenkant.', pickBtn('coverpdf', 'Toevoegen'))}
+    <div class="progress" data-prog><i></i></div>
+    <div class="status" data-fstatus></div>`;
+  const status = (t) => (el.querySelector('[data-fstatus]').textContent = t);
+  el.querySelectorAll('[data-file]').forEach((input) => input.addEventListener('change', async () => {
+    const file = input.files[0], which = input.dataset.file;
+    if (!file) return;
+    const bar = el.querySelector('[data-prog]');
+    try {
+      status('PDF wordt gecontroleerd…');
+      const { buf, info } = await readPdfFile(file);
+      if (which === 'pdf' && entry.comments.some((x) => x.page) && !confirm('Opmerkingen blijven gekoppeld aan hun paginanummer. Klopt de nummering in de nieuwe PDF nog? Doorgaan?')) return status('');
+      const q = new URLSearchParams({ fileName: file.name, pageCount: String(info.pageCount) });
+      if (info.trim) q.set('trim', JSON.stringify(info.trim));
+      let cover = null;
+      if (which === 'pdf') {
+        cover = await makeCover({ data: new Uint8Array(buf.slice(0)) }, info.trim, !b.coverPdf && b.coverMode !== 'none').catch(() => null);
+        if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
+      }
+      bar.style.display = 'block';
+      bar.firstElementChild.style.width = '0';
+      status('Uploaden…');
+      entry.meta = await putPdf(`/api/admin/books/${b.id}/${which}?` + q, file, (f) => { bar.firstElementChild.style.width = f * 100 + '%'; });
+      status('Voorkant wordt bijgewerkt…');
+      if (cover?.blob) entry.meta = await saveCover(b.id, cover, true);
+      else if (which === 'coverpdf') await refreshCover(entry);
+      redraw(entry);
+      openDrawer(entry);
+      toast(which === 'pdf' ? 'Binnenwerk vervangen' : 'Omslag opgeslagen');
+    } catch (e) {
+      status(e.message);
+    } finally {
+      bar.style.display = 'none';
+    }
+  }));
+  const rm = el.querySelector('[data-act=rmcover]');
+  if (rm) rm.onclick = async () => {
+    if (!confirm('Losse omslag verwijderen? Het boek gebruikt dan weer de omslaginstelling van de PDF.')) return;
+    entry.meta = await api(`/api/admin/books/${b.id}/coverpdf`, { method: 'DELETE' });
+    if (hasFront(entry.meta)) await refreshCover(entry).catch(() => {});
+    redraw(entry);
+    openDrawer(entry);
+  };
 }
 
 function spineLine(b) {
