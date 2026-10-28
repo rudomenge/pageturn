@@ -26,6 +26,9 @@ const validId = (id) => /^[a-z0-9]{10,32}$/.test(id);
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
+function readJsonString(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
 function writeJson(file, data) {
   const tmp = file + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
@@ -37,8 +40,8 @@ function loadBook(id) {
   return meta && fs.existsSync(path.join(bookDir(id), 'book.pdf')) ? meta : null;
 }
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt };
 }
 function cleanSettings(body, meta) {
   const out = {};
@@ -46,6 +49,11 @@ function cleanSettings(body, meta) {
   if (BINDINGS.includes(body.binding)) out.binding = body.binding;
   if (typeof body.coverColor === 'string' && /^(#[0-9a-f]{6}|auto)$/i.test(body.coverColor)) out.coverColor = body.coverColor;
   if (COVER_MODES.includes(body.coverMode)) out.coverMode = body.coverMode;
+  let ps = body.pageSize;
+  if (typeof ps === 'string') ps = readJsonString(ps);
+  if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
+    out.pageSize = { widthMm: Math.round(+ps.widthMm * 10) / 10, heightMm: Math.round(+ps.heightMm * 10) / 10 };
+  }
   for (const k of ['allowDownload', 'allowComments', 'allowBindingSwitch']) {
     if (k in body) out[k] = body[k] === true || body[k] === 'true' || body[k] === 'on';
   }
@@ -236,6 +244,23 @@ app.post('/api/books/:id/comments', (req, res) => {
 // ---- Bekeken-registratie (zelfde API als de Cloudflare-versie) ----
 const deviceOf = (ua = '') => (/iPad|Tablet/i.test(ua) ? 'tablet' : /Mobi|Android|iPhone/i.test(ua) ? 'mobiel' : 'computer');
 const viewsFile = (id) => path.join(bookDir(id), 'views.json');
+
+// Voorkant als JPEG, gemaakt in de browser van de beheerder.
+app.put('/api/admin/books/:id/cover', requireAdmin, express.raw({ type: ['image/jpeg', 'image/png'], limit: '3mb' }), (req, res) => {
+  const meta = loadBook(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'Boek niet gevonden' });
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Ongeldig plaatje' });
+  fs.writeFileSync(path.join(bookDir(meta.id), 'cover.jpg'), req.body);
+  meta.coverVersion = Date.now();
+  writeJson(path.join(bookDir(meta.id), 'meta.json'), meta);
+  res.json(meta);
+});
+app.get('/api/books/:id/cover', (req, res) => {
+  const meta = loadBook(req.params.id);
+  const file = meta && path.join(bookDir(meta.id), 'cover.jpg');
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'Geen voorkant' });
+  res.set('Cache-Control', 'public, max-age=300').type('image/jpeg').sendFile(file);
+});
 
 app.get('/api/admin/books/:id/views', requireAdmin, (req, res) => {
   if (!loadBook(req.params.id)) return res.status(404).json({ error: 'Boek niet gevonden' });

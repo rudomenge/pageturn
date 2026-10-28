@@ -3,90 +3,210 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bladerboek beheer</title>
+<meta name="theme-color" content="#f1f7fe">
+<title>Pageturn · boeken</title>
 <style>
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
   @font-face { font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/fonts/inter-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
-  :root { --ink:#1d1b18; --muted:#6d675e; --line:#e3ddd2; --bg:#f6f3ee; --accent:#b5532b; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  :root {
+    --bg: #f1f7fe; --ink: #0d1b2e; --muted: #687789; --soft: #93a0b0; --line: rgba(13, 27, 46, .08);
+    --card: rgba(255, 255, 255, .82); --accent: #3d6bff; --green: #2fb36f; --pink: #f0629a; --amber: #f3a43b;
+    --shadow: 0 1px 2px rgba(16, 36, 70, .04), 0 10px 30px rgba(16, 36, 70, .07);
+    --shadow-hi: 0 2px 4px rgba(16, 36, 70, .05), 0 22px 50px rgba(16, 36, 70, .12);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01";
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); }
-  header { padding: 22px 24px 8px; max-width: 1000px; margin: 0 auto; }
-  h1 { margin: 0; font-size: 22px; }
-  header p { margin: 4px 0 0; color: var(--muted); }
-  main { max-width: 1000px; margin: 0 auto; padding: 12px 24px 60px; }
+  html { background: var(--bg); }
+  body { margin: 0; min-height: 100vh; background: var(--bg); }
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background:
+    radial-gradient(900px 520px at 12% -8%, rgba(132, 176, 255, .35), transparent 60%),
+    radial-gradient(700px 480px at 92% 0%, rgba(255, 170, 210, .30), transparent 62%),
+    radial-gradient(800px 600px at 60% 110%, rgba(170, 220, 255, .35), transparent 60%); }
   button, input, select, textarea { font: inherit; color: inherit; }
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-decoration: none; font-size: 14px; color: inherit; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.danger { color: #a3271b; }
-  .upload { background: #fff; border: 2px dashed #cfc5b4; border-radius: 14px; padding: 22px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-  .upload.over { border-color: var(--accent); }
-  .upload strong { display: block; font-size: 16px; }
-  .upload span { color: var(--muted); font-size: 14px; }
-  .upload .grow { flex: 1; min-width: 200px; }
-  .progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; display: none; }
-  .progress i { display: block; height: 100%; width: 0; background: var(--accent); }
-  .book { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
-  .book-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-  .book-head h2 { margin: 0 0 2px; font-size: 17px; }
-  .sub { color: var(--muted); font-size: 13px; }
-  .share { display: flex; gap: 6px; margin: 12px 0; }
-  .share input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #faf8f4; font-size: 14px; }
-  .settings { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; }
-  .settings label { display: inline-flex; gap: 6px; align-items: center; }
-  .settings select, .settings input[type=text] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
-  details { margin-top: 12px; }
-  summary { cursor: pointer; font-size: 14px; font-weight: 600; }
-  .c { border-top: 1px solid var(--line); padding: 9px 0; display: flex; gap: 10px; justify-content: space-between; }
-  .c .t { white-space: pre-wrap; font-size: 14px; overflow-wrap: anywhere; }
-  .c.done .t { color: var(--muted); text-decoration: line-through; }
-  .c .acts { display: flex; gap: 6px; flex: none; align-items: flex-start; }
-  .c .acts .btn { padding: 4px 8px; font-size: 12px; }
-  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
-  .views { margin-top: 12px; display: flex; align-items: center; gap: 6px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .dot.on { background: #3f9b5b; } .dot.off { background: #c9c1b4; }
-  .v { display: grid; grid-template-columns: 170px 150px 160px 1fr; gap: 8px; border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
-  @media (max-width: 700px) { .v { grid-template-columns: 1fr 1fr; } }
-  .badge { background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 0 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+  .brand i { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, #3d6bff, #9a7bff 55%, #f0629a); box-shadow: 0 4px 12px rgba(61, 107, 255, .35); }
+  .hero { padding: 42px 0 26px; }
+  .hero h1 { margin: 0; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.05; letter-spacing: -.035em; font-weight: 700; }
+  .hero p { margin: 12px 0 0; color: var(--muted); font-size: 17px; max-width: 560px; line-height: 1.5; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: #fff; cursor: pointer; text-decoration: none; font-size: 14px; font-weight: 550; color: var(--ink); white-space: nowrap;
+    transition: transform .15s, box-shadow .15s, background .15s; }
+  .btn:hover { box-shadow: 0 4px 14px rgba(16, 36, 70, .09); }
+  .btn:active { transform: scale(.97); }
+  .btn.dark { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .btn.dark:hover { background: #1b2d47; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: rgba(13, 27, 46, .05); box-shadow: none; }
+  .btn.danger { color: #c0392b; }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+  .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .upload { position: relative; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 20px 22px; border-radius: 22px; background: var(--card);
+    backdrop-filter: blur(14px); box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, .7); transition: box-shadow .2s, transform .2s; }
+  .upload.over { box-shadow: 0 0 0 2px var(--accent), var(--shadow-hi); transform: translateY(-1px); }
+  .upload .ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, #e7efff, #f6eaff); color: var(--accent); flex: none; }
+  .upload .ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .upload .grow { flex: 1; min-width: 220px; }
+  .upload strong { display: block; font-size: 15px; font-weight: 620; }
+  .upload span { color: var(--muted); font-size: 13.5px; }
+  .field { height: 38px; padding: 0 34px 0 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 14px; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5' fill='none' stroke='%23687789' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; }
+  .progress { height: 4px; background: rgba(13, 27, 46, .07); border-radius: 2px; overflow: hidden; margin-top: 10px; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #9a7bff); transition: width .2s; }
+  .status { color: var(--muted); font-size: 13px; margin-top: 4px; min-height: 0; }
+
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 40px 0 14px; }
+  .section-head h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; font-weight: 650; }
+  .section-head span { color: var(--soft); font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 22px; padding-bottom: 80px; }
+  .card { position: relative; border-radius: 22px; background: var(--card); backdrop-filter: blur(14px); box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, .7);
+    overflow: hidden; transition: box-shadow .25s, transform .25s; display: flex; flex-direction: column; }
+  .card:hover { box-shadow: var(--shadow-hi); transform: translateY(-2px); }
+  .thumb { position: relative; height: 230px; display: grid; place-items: center; cursor: pointer;
+    background: radial-gradient(120% 90% at 50% 100%, rgba(197, 216, 255, .55), transparent 70%), linear-gradient(180deg, #f7faff, #eef4fd); }
+  .thumb .b3d { transform: translateY(4px); }
+  .card:hover .thumb .b3d-book { transform: rotateY(-24deg); }
+  .thumb .spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(61, 107, 255, .18); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .card-body { padding: 16px 18px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .card h3 { margin: 0; font-size: 15.5px; font-weight: 620; letter-spacing: -.01em; line-height: 1.3; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; line-height: 1.45; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(13, 27, 46, .045); font-size: 12.5px; color: var(--muted); font-weight: 520; }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #c3ccd8; }
+  .chip.on { color: #17824d; background: rgba(47, 179, 111, .11); } .chip.on .dot { background: var(--green); box-shadow: 0 0 0 3px rgba(47, 179, 111, .18); }
+  .chip.warn { color: #b0306a; background: rgba(240, 98, 154, .11); } .chip.warn .dot { background: var(--pink); }
+  .card-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 4px; }
+  .card-actions .btn { flex: 1; }
+  .card-actions .btn.ghost { flex: none; width: 38px; padding: 0; }
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 70px 20px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow); }
+
+  /* Zijpaneel per boek */
+  .scrim { position: fixed; inset: 0; background: rgba(13, 27, 46, .18); backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 10; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(460px, calc(100vw - 24px)); background: #fff; border-radius: 24px; box-shadow: 0 30px 80px rgba(16, 36, 70, .22);
+    transform: translateX(calc(100% + 24px)); transition: transform .35s cubic-bezier(.2, .8, .2, 1); z-index: 11; display: flex; flex-direction: column; overflow: hidden; }
+  .drawer.open { transform: none; }
+  .d-head { display: flex; gap: 14px; align-items: center; padding: 18px 18px 14px 20px; border-bottom: 1px solid var(--line); }
+  .d-head .mini { flex: none; width: 70px; height: 80px; display: grid; place-items: center; border-radius: 14px; background: linear-gradient(180deg, #f7faff, #eaf1fc); }
+  .d-head h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.015em; overflow-wrap: anywhere; }
+  .d-head .x { margin-left: auto; align-self: flex-start; }
+  .d-body { overflow: auto; padding: 6px 20px 24px; }
+  .d-sec { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .d-sec:last-child { border-bottom: 0; }
+  .d-sec h4 { margin: 0 0 12px; font-size: 12px; font-weight: 620; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
+  .share { display: flex; gap: 6px; }
+  .share input { flex: 1; min-width: 0; height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: #f6f9fd; font-size: 13.5px; color: var(--muted); }
+  .form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); font-weight: 520; }
+  .form .full { grid-column: 1 / -1; }
+  .form input[type=text] { height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 14px; color: var(--ink); }
+  .form .field { border-radius: 12px; color: var(--ink); }
+  .color-row { display: flex; align-items: center; gap: 10px; height: 38px; font-size: 14px; color: var(--ink); }
+  .color-row input[type=color] { width: 38px; height: 30px; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: #fff; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 14px; }
+  .switch { position: relative; width: 40px; height: 24px; flex: none; }
+  .switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+  .switch i { position: absolute; inset: 0; border-radius: 999px; background: #d7dee8; transition: background .2s; }
+  .switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .2s; }
+  .switch input:checked + i { background: var(--accent); }
+  .switch input:checked + i::after { transform: translateX(16px); }
+  .switch input:focus-visible + i { box-shadow: 0 0 0 3px rgba(61, 107, 255, .3); }
+  .row { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .row:first-child { border-top: 0; padding-top: 0; }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .sub { color: var(--muted); font-size: 12.5px; }
+  .row .t { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 3px; }
+  .row.done .t { color: var(--soft); text-decoration: line-through; }
+  .row .acts { display: flex; gap: 4px; flex: none; align-items: flex-start; }
+  .none { color: var(--soft); font-size: 13.5px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px;
+    font-size: 13.5px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    .hero { padding: 26px 0 18px; }
+    .form { grid-template-columns: 1fr; }
+    .upload .field { flex: 1 1 100%; }
+    .upload > .btn { flex: 1 1 100%; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Bladerboek</h1>
-  <p>Upload een PDF, kies de uitvoering en stuur je klant de deellink.</p>
-</header>
-<main>
+<div class="wrap">
+  <header>
+    <div class="brand"><i></i>Pageturn</div>
+    <label class="btn dark">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Nieuw boek
+      <input type="file" id="file2" accept="application/pdf,.pdf" hidden>
+    </label>
+  </header>
+
+  <section class="hero">
+    <h1>Je boeken, zoals ze<br>straks in de hand liggen.</h1>
+    <p>Upload een PDF, kies de uitvoering en stuur je klant de link. Je ziet hier wie heeft gekeken en wat er is opgemerkt.</p>
+  </section>
+
   <div class="upload" id="upload">
+    <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0l-4 4m4-4l4 4M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg></div>
     <div class="grow">
-      <strong>Nieuw boek uploaden</strong>
-      <span>Sleep een PDF (tot 95 MB) hierheen of kies een bestand. De afloop wordt automatisch weggesneden.</span>
+      <strong>Sleep een PDF hierheen</strong>
+      <span>Tot 95 MB. De afloop wordt automatisch weggesneden.</span>
       <div class="progress" id="progress"><i></i></div>
-      <div class="sub" id="status" role="status"></div>
+      <div class="status" id="status" role="status"></div>
     </div>
-    <select id="newBinding">
+    <select class="field" id="newBinding" aria-label="Uitvoering">
       <option value="hardcover">Hardcover</option>
       <option value="softcover">Softcover</option>
       <option value="magazine">Magazine</option>
     </select>
-    <select id="newCover">
+    <select class="field" id="newCover" aria-label="Omslag">
       <option value="outer">Eerste en laatste pagina zijn de omslag</option>
       <option value="full">Omslag én binnenkant omslag in PDF</option>
       <option value="none">Geen omslag in de PDF</option>
     </select>
-    <label class="btn primary">PDF kiezen<input type="file" id="file" accept="application/pdf,.pdf" hidden></label>
+    <label class="btn">PDF kiezen<input type="file" id="file" accept="application/pdf,.pdf" hidden></label>
   </div>
-  <div id="books"></div>
-</main>
-<script>
+
+  <div class="section-head"><h2>Boeken</h2><span id="count"></span></div>
+  <div class="grid" id="books"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { renderBook3D, BINDINGS, spineMm } from '/book3d.js';
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDuration = (s) => (!s ? 'minder dan een minuut' : s < 60 ? `${s} sec` : `${Math.round(s / 60)} min`);
+const fmtDate = (iso) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtDay = (iso) => new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+const mm = (v) => (Math.round(v) / 10).toLocaleString('nl-NL');
+const PT_TO_MM = 25.4 / 72;
+const DEFAULT_COVER = '#2b3a55';
 // Deze browser is van de eigenaar: eigen bezoeken aan deellinks tellen niet mee als "bekeken".
 try { localStorage.setItem('bladerboek:owner', '1'); } catch {}
-const fmtDate = (iso) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { ...(opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+  const res = await fetch(path, { ...opts, headers: { ...(typeof opts.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 }
@@ -94,10 +214,10 @@ async function api(path, opts = {}) {
 const MAX_UPLOAD_MB = 95; // Cloudflare accepteert maximaal 100 MB per verzoek
 
 // Paginatal en afloop (TrimBox) lezen we hier in de browser, zodat de server niets hoeft te parsen.
-async function inspectPdf(file) {
+async function inspectPdf(buf) {
   try {
     const { PDFDocument } = await import('/vendor/pdf-lib.esm.min.js');
-    const doc = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false, ignoreEncryption: true });
+    const doc = await PDFDocument.load(buf, { updateMetadata: false, ignoreEncryption: true });
     const page = doc.getPage(0);
     const crop = page.getCropBox(), trim = page.getTrimBox();
     const inset = {
@@ -114,6 +234,95 @@ async function inspectPdf(file) {
   }
 }
 
+let pdfjs;
+async function loadPdfjs() {
+  if (!pdfjs) {
+    pdfjs = await import('/vendor/pdf.min.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+  }
+  return pdfjs;
+}
+
+// Formaat (bijgesneden, in mm) en een JPEG van pagina 1 voor de 3D-thumbnail.
+async function makeCover(src, trim, withImage) {
+  const lib = await loadPdfjs();
+  const pdf = await lib.getDocument({ ...src, isEvalSupported: false }).promise;
+  try {
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const t = trim || { left: 0, top: 0, right: 0, bottom: 0 };
+    const rotated = page.rotate % 180 !== 0;
+    const trimW = rotated ? base.width - t.top - t.bottom : base.width - t.left - t.right;
+    const trimH = rotated ? base.height - t.left - t.right : base.height - t.top - t.bottom;
+    const pageSize = { widthMm: trimW * PT_TO_MM, heightMm: trimH * PT_TO_MM };
+    if (!withImage) return { pageSize };
+    const scale = 720 / Math.max(trimW, trimH);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(trimW * scale);
+    canvas.height = Math.round(trimH * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const offX = (rotated ? t.bottom : t.left) * scale, offY = (rotated ? t.left : t.top) * scale;
+    await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale }), transform: [1, 0, 0, 1, -offX, -offY] }).promise;
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.86));
+    return { pageSize, blob };
+  } finally {
+    pdf.destroy();
+  }
+}
+
+async function saveCover(id, cover) {
+  let meta = await api(`/api/admin/books/${id}`, { method: 'PATCH', body: JSON.stringify({ pageSize: cover.pageSize }) });
+  if (cover.blob) meta = await api(`/api/admin/books/${id}/cover`, { method: 'PUT', body: cover.blob, headers: { 'Content-Type': 'image/jpeg' } });
+  return meta;
+}
+
+// Gemiddelde randkleur van de voorkant, voor de rug als de kaftkleur op automatisch staat.
+const colorCache = new Map();
+async function edgeColor(url) {
+  if (colorCache.has(url)) return colorCache.get(url);
+  const p = new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 40; c.height = 60;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, 40, 60);
+      const d = ctx.getImageData(0, 0, 40, 60).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = 0; y < 60; y++) for (let x = 0; x < 40; x++) {
+        if (x > 2 && x < 37 && y > 2 && y < 57) continue;
+        const k = (y * 40 + x) * 4; r += d[k]; g += d[k + 1]; b += d[k + 2]; n++;
+      }
+      res('#' + [r, g, b].map((v) => Math.round(v / n).toString(16).padStart(2, '0')).join(''));
+    };
+    img.onerror = () => res(DEFAULT_COVER);
+    img.src = url;
+  });
+  colorCache.set(url, p);
+  return p;
+}
+
+const coverUrl = (b) => (b.coverVersion && b.coverMode !== 'none' ? `/api/books/${b.id}/cover?v=${b.coverVersion}` : null);
+const needsCover = (b) => !b.pageSize || (b.coverMode !== 'none' && !b.coverVersion);
+
+async function drawThumb(el, b, box) {
+  const url = coverUrl(b);
+  const color = b.coverColor && b.coverColor !== 'auto' ? b.coverColor : url ? await edgeColor(url) : DEFAULT_COVER;
+  renderBook3D(el, {
+    coverUrl: url, title: b.title, binding: b.binding, coverColor: color, pages: b.pageCount || 40,
+    widthMm: b.pageSize?.widthMm, heightMm: b.pageSize?.heightMm, boxWidth: box[0], boxHeight: box[1],
+  });
+}
+
+function describe(b) {
+  const parts = [BINDINGS[b.binding]?.label || b.binding];
+  if (b.pageSize) parts.push(`${mm(b.pageSize.widthMm)} × ${mm(b.pageSize.heightMm)} cm`);
+  if (b.pageCount) parts.push(`${b.pageCount} pagina's`);
+  return parts.join(' · ');
+}
+
 function setStatus(text) { $('status').textContent = text; }
 
 async function upload(file) {
@@ -121,23 +330,26 @@ async function upload(file) {
   if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return setStatus('Kies een PDF-bestand.');
   if (file.size > MAX_UPLOAD_MB * 1048576) return setStatus(`Dit bestand is ${(file.size / 1048576).toFixed(0)} MB. Het maximum is ${MAX_UPLOAD_MB} MB; exporteer de PDF eventueel met iets lagere beeldkwaliteit.`);
   setStatus('PDF wordt gecontroleerd…');
-  const info = await inspectPdf(file);
+  const buf = await file.arrayBuffer();
+  const info = await inspectPdf(buf.slice(0));
   if (!info) return setStatus('Dit bestand kon niet als PDF worden gelezen.');
-  const q = new URLSearchParams({
-    fileName: file.name,
-    binding: $('newBinding').value,
-    coverMode: $('newCover').value,
-    pageCount: String(info.pageCount),
-  });
+  const coverMode = $('newCover').value;
+  const cover = await makeCover({ data: new Uint8Array(buf.slice(0)) }, info.trim, coverMode !== 'none').catch(() => null);
+  const q = new URLSearchParams({ fileName: file.name, binding: $('newBinding').value, coverMode, pageCount: String(info.pageCount) });
   if (info.trim) q.set('trim', JSON.stringify(info.trim));
+  if (cover) q.set('pageSize', JSON.stringify(cover.pageSize));
   const xhr = new XMLHttpRequest();
   const bar = $('progress');
   bar.style.display = 'block';
+  bar.firstElementChild.style.width = '0';
   setStatus('Uploaden…');
   xhr.upload.onprogress = (e) => { bar.firstElementChild.style.width = (e.loaded / e.total) * 100 + '%'; };
-  xhr.onload = () => {
+  xhr.onload = async () => {
     bar.style.display = 'none';
-    setStatus(xhr.status >= 300 ? 'Uploaden mislukt: ' + xhr.responseText : `"${file.name}" staat klaar. Kopieer hieronder de link voor je klant.`);
+    if (xhr.status >= 300) return setStatus('Uploaden mislukt: ' + xhr.responseText);
+    const meta = JSON.parse(xhr.responseText);
+    if (cover?.blob) await api(`/api/admin/books/${meta.id}/cover`, { method: 'PUT', body: cover.blob, headers: { 'Content-Type': 'image/jpeg' } }).catch(() => {});
+    setStatus(`"${file.name}" staat klaar. Kopieer de link via het boek hieronder.`);
     load();
   };
   xhr.onerror = () => { bar.style.display = 'none'; setStatus('Uploaden mislukt. Controleer je verbinding en probeer het opnieuw.'); };
@@ -146,110 +358,223 @@ async function upload(file) {
   xhr.send(file);
 }
 
-$('file').addEventListener('change', (e) => upload(e.target.files[0]));
+for (const id of ['file', 'file2']) $(id).addEventListener('change', (e) => { upload(e.target.files[0]); e.target.value = ''; });
 const up = $('upload');
 ['dragenter', 'dragover'].forEach((ev) => up.addEventListener(ev, (e) => { e.preventDefault(); up.classList.add('over'); }));
 up.addEventListener('dragleave', () => up.classList.remove('over'));
 up.addEventListener('drop', (e) => { e.preventDefault(); up.classList.remove('over'); upload(e.dataTransfer.files[0]); });
 
+const books = new Map(); // id -> { meta, views, comments, card }
+
 async function load() {
-  const books = await api('/api/admin/books');
+  const list = await api('/api/admin/books');
   const wrap = $('books');
-  if (!books.length) { wrap.innerHTML = '<div class="empty">Nog geen boeken. Upload je eerste PDF hierboven.</div>'; return; }
+  $('count').textContent = list.length ? `${list.length} ${list.length === 1 ? 'boek' : 'boeken'}` : '';
+  if (!list.length) { wrap.innerHTML = '<div class="empty">Nog geen boeken. Sleep je eerste PDF hierboven in het vak.</div>'; return; }
   wrap.innerHTML = '';
-  for (const b of books) wrap.appendChild(await bookCard(b));
+  books.clear();
+  for (const b of list) {
+    const entry = { meta: b, views: [], comments: [] };
+    books.set(b.id, entry);
+    entry.card = card(entry);
+    wrap.appendChild(entry.card);
+    Promise.all([
+      api(`/api/admin/books/${b.id}/views`).catch(() => []),
+      api(`/api/books/${b.id}/comments`).catch(() => []),
+    ]).then(([views, comments]) => { entry.views = views; entry.comments = comments; fillChips(entry); });
+  }
+  // Oudere boeken krijgen hun voorkant en formaat alsnog, één voor één.
+  for (const entry of books.values()) if (needsCover(entry.meta)) await refreshCover(entry).catch(() => redraw(entry));
 }
 
-async function bookCard(b) {
-  const link = `${location.origin}/b/${b.id}`;
-  const el = document.createElement('div');
-  el.className = 'book';
-  el.innerHTML = `
-    <div class="book-head">
-      <div>
-        <h2>${esc(b.title)}</h2>
-        <div class="sub">${b.pageCount || '?'} pagina's · ${(b.size / 1048576).toFixed(1)} MB · ${fmtDate(b.createdAt)}</div>
-      </div>
-      <div style="display:flex;gap:6px">
-        <a class="btn" href="${link}" target="_blank">Bekijken</a>
-        <button class="btn danger" data-act="delete">Verwijderen</button>
-      </div>
-    </div>
-    <div class="share"><input readonly value="${esc(link)}"><button class="btn" data-act="copy">Link kopiëren</button></div>
-    <div class="settings">
-      <label>Titel <input type="text" data-k="title" value="${esc(b.title)}"></label>
-      <label>Uitvoering <select data-k="binding">
-        ${['hardcover', 'softcover', 'magazine'].map((v) => `<option value="${v}" ${b.binding === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}
-      </select></label>
-      <label>Omslag <select data-k="coverMode">
-        <option value="outer" ${b.coverMode === 'outer' ? 'selected' : ''}>Eerste en laatste pagina</option>
-        <option value="full" ${b.coverMode === 'full' ? 'selected' : ''}>Incl. binnenkant omslag</option>
-        <option value="none" ${b.coverMode === 'none' ? 'selected' : ''}>Geen omslag in PDF</option>
-      </select></label>
-      <label>Kaftkleur <input type="checkbox" data-k="autoColor" ${b.coverColor === 'auto' ? 'checked' : ''}> automatisch
-        <input type="color" data-k="coverColor" value="${b.coverColor === 'auto' ? '#1f2a44' : b.coverColor}" ${b.coverColor === 'auto' ? 'disabled' : ''}></label>
-      <label><input type="checkbox" data-k="allowDownload" ${b.allowDownload ? 'checked' : ''}> Downloaden toestaan</label>
-      <label><input type="checkbox" data-k="allowComments" ${b.allowComments ? 'checked' : ''}> Opmerkingen toestaan</label>
-      <label><input type="checkbox" data-k="allowBindingSwitch" ${b.allowBindingSwitch ? 'checked' : ''}> Klant mag uitvoering wisselen</label>
-    </div>
-    <div class="views sub" data-views>Bekeken: laden…</div>
-    <details class="vdetails" hidden><summary>Bezoeken</summary><div class="vlist"></div></details>
-    <details><summary>Opmerkingen</summary><div class="clist"></div></details>`;
+async function refreshCover(entry) {
+  const b = entry.meta;
+  const cover = await makeCover({ url: `/api/books/${b.id}/pdf` }, b.trim, b.coverMode !== 'none');
+  entry.meta = await saveCover(b.id, cover);
+  redraw(entry);
+}
 
-  el.querySelector('[data-act=copy]').onclick = async (e) => {
-    await navigator.clipboard.writeText(link).catch(() => el.querySelector('.share input').select());
-    e.target.textContent = 'Gekopieerd!';
-    setTimeout(() => (e.target.textContent = 'Link kopiëren'), 1500);
-  };
-  el.querySelector('[data-act=delete]').onclick = async () => {
-    if (!confirm(`"${b.title}" en alle opmerkingen verwijderen?`)) return;
+function redraw(entry) {
+  const { card: c, meta: b } = entry;
+  c.querySelector('h3').textContent = b.title;
+  c.querySelector('.meta').textContent = describe(b);
+  drawThumb(c.querySelector('.b3'), b, [210, 200]);
+  if (drawerEntry === entry) drawThumb($('drawer').querySelector('.mini > div'), b, [62, 72]);
+}
+
+function card(entry) {
+  const b = entry.meta;
+  const link = `${location.origin}/b/${b.id}`;
+  const el = document.createElement('article');
+  el.className = 'card';
+  el.innerHTML = `
+    <div class="thumb" title="Instellingen en bezoeken"><div class="b3"><div class="spin"></div></div></div>
+    <div class="card-body">
+      <h3>${esc(b.title)}</h3>
+      <div class="meta">${esc(describe(b))}</div>
+      <div class="chips"><span class="chip"><i class="dot"></i>laden…</span></div>
+      <div class="card-actions">
+        <a class="btn dark sm" href="${link}" target="_blank">Bekijken</a>
+        <button class="btn sm" data-act="copy">Link kopiëren</button>
+        <button class="btn ghost sm" data-act="more" title="Instellingen" aria-label="Instellingen">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </button>
+      </div>
+    </div>`;
+  if (!needsCover(b) || b.coverMode === 'none') drawThumb(el.querySelector('.b3'), b, [210, 200]);
+  el.querySelector('[data-act=copy]').onclick = () => copyLink(link);
+  el.querySelector('[data-act=more]').onclick = () => openDrawer(entry);
+  el.querySelector('.thumb').onclick = () => openDrawer(entry);
+  return el;
+}
+
+async function copyLink(link) {
+  try { await navigator.clipboard.writeText(link); toast('Link gekopieerd'); }
+  catch { prompt('Kopieer de link:', link); }
+}
+
+function fillChips(entry) {
+  const { views, comments } = entry;
+  const open = comments.filter((c) => !c.resolved).length;
+  const chips = [];
+  if (views.length) chips.push(`<span class="chip on"><i class="dot"></i>${views.length}× bekeken · ${esc(fmtDay(views[0].lastSeen || views[0].startedAt))}</span>`);
+  else chips.push('<span class="chip"><i class="dot"></i>Nog niet bekeken</span>');
+  if (open) chips.push(`<span class="chip warn"><i class="dot"></i>${open} open ${open === 1 ? 'opmerking' : 'opmerkingen'}</span>`);
+  else if (comments.length) chips.push(`<span class="chip">${comments.length} ${comments.length === 1 ? 'opmerking' : 'opmerkingen'}</span>`);
+  entry.card.querySelector('.chips').innerHTML = chips.join('');
+  if (drawerEntry === entry) fillDrawerLists(entry);
+}
+
+// ---------- Zijpaneel ----------
+let drawerEntry = null;
+const drawer = $('drawer');
+
+function closeDrawer() {
+  drawer.classList.remove('open');
+  $('scrim').classList.remove('open');
+  drawer.setAttribute('aria-hidden', 'true');
+  drawerEntry = null;
+}
+$('scrim').onclick = closeDrawer;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerEntry) closeDrawer(); });
+
+const sw = (k, on, label) => `<label class="toggle">${label}<span class="switch"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><i></i></span></label>`;
+
+function openDrawer(entry) {
+  drawerEntry = entry;
+  const b = entry.meta;
+  const link = `${location.origin}/b/${b.id}`;
+  const auto = !b.coverColor || b.coverColor === 'auto';
+  drawer.innerHTML = `
+    <div class="d-head">
+      <div class="mini"><div></div></div>
+      <div><h2>${esc(b.title)}</h2><div class="meta" data-desc>${esc(describe(b))}</div></div>
+      <button class="btn ghost sm x" data-act="close" aria-label="Sluiten"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="d-body">
+      <div class="d-sec">
+        <h4>Deellink</h4>
+        <div class="share"><input readonly value="${esc(link)}"><button class="btn sm dark" data-act="copy">Kopiëren</button></div>
+      </div>
+      <div class="d-sec">
+        <h4>Boek</h4>
+        <div class="form">
+          <label class="f full">Titel <input type="text" data-k="title" value="${esc(b.title)}"></label>
+          <label class="f">Uitvoering <select class="field" data-k="binding">
+            ${Object.entries(BINDINGS).map(([v, x]) => `<option value="${v}" ${b.binding === v ? 'selected' : ''}>${x.label}</option>`).join('')}
+          </select></label>
+          <label class="f">Omslag <select class="field" data-k="coverMode">
+            <option value="outer" ${b.coverMode === 'outer' ? 'selected' : ''}>Eerste en laatste pagina</option>
+            <option value="full" ${b.coverMode === 'full' ? 'selected' : ''}>Incl. binnenkant omslag</option>
+            <option value="none" ${b.coverMode === 'none' ? 'selected' : ''}>Geen omslag in PDF</option>
+          </select></label>
+          <div class="f full" style="font-size:12.5px;color:var(--muted);font-weight:520">Kaftkleur
+            <div class="color-row"><span class="switch"><input type="checkbox" data-k="autoColor" ${auto ? 'checked' : ''}><i></i></span>automatisch
+              <input type="color" data-k="coverColor" value="${auto ? '#1f2a44' : b.coverColor}" ${auto ? 'disabled' : ''}></div>
+          </div>
+        </div>
+        <div class="meta" data-spine style="margin-top:10px"></div>
+      </div>
+      <div class="d-sec">
+        <h4>Voor de klant</h4>
+        ${sw('allowDownload', b.allowDownload, 'PDF downloaden toestaan')}
+        ${sw('allowComments', b.allowComments, 'Opmerkingen toestaan')}
+        ${sw('allowBindingSwitch', b.allowBindingSwitch, 'Klant mag uitvoering wisselen')}
+      </div>
+      <div class="d-sec"><h4>Bezoeken</h4><div data-views></div></div>
+      <div class="d-sec"><h4>Opmerkingen</h4><div data-comments></div></div>
+      <div class="d-sec">
+        <button class="btn sm danger" data-act="delete">Boek verwijderen</button>
+        <span class="meta" style="margin-left:8px">${(b.size / 1048576).toFixed(1)} MB · geüpload ${esc(fmtDate(b.createdAt))}</span>
+      </div>
+    </div>`;
+  drawThumb(drawer.querySelector('.mini > div'), b, [62, 72]);
+  spineLine(b);
+  fillDrawerLists(entry);
+
+  drawer.querySelector('[data-act=close]').onclick = closeDrawer;
+  drawer.querySelector('[data-act=copy]').onclick = () => copyLink(link);
+  drawer.querySelector('[data-act=delete]').onclick = async () => {
+    if (!confirm(`"${b.title}" met alle opmerkingen en bezoeken verwijderen?`)) return;
     await api(`/api/admin/books/${b.id}`, { method: 'DELETE' });
+    closeDrawer();
     load();
   };
-  el.querySelectorAll('[data-k]').forEach((input) => {
+  drawer.querySelectorAll('[data-k]').forEach((input) => {
     input.addEventListener('change', async () => {
       const k = input.dataset.k;
       let body;
       if (k === 'autoColor') {
-        el.querySelector('[data-k=coverColor]').disabled = input.checked;
-        body = { coverColor: input.checked ? 'auto' : el.querySelector('[data-k=coverColor]').value };
+        drawer.querySelector('[data-k=coverColor]').disabled = input.checked;
+        body = { coverColor: input.checked ? 'auto' : drawer.querySelector('[data-k=coverColor]').value };
       } else body = { [k]: input.type === 'checkbox' ? input.checked : input.value };
-      await api(`/api/admin/books/${b.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      if (k === 'title') el.querySelector('h2').textContent = input.value;
+      entry.meta = await api(`/api/admin/books/${b.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      if (k === 'title') drawer.querySelector('h2').textContent = entry.meta.title;
+      drawer.querySelector('[data-desc]').textContent = describe(entry.meta);
+      spineLine(entry.meta);
+      redraw(entry);
+      if (k === 'coverMode' && needsCover(entry.meta)) refreshCover(entry).catch(() => {});
+      toast('Opgeslagen');
     });
   });
 
-  const views = await api(`/api/admin/books/${b.id}/views`).catch(() => []);
-  const vEl = el.querySelector('[data-views]');
-  if (!views.length) vEl.innerHTML = '<span class="dot off"></span>Nog niet bekeken';
-  else {
-    const last = views[0];
-    vEl.innerHTML = `<span class="dot on"></span><b>${views.length}× bekeken</b> · laatst ${esc(fmtDate(last.lastSeen || last.startedAt))}`;
-    const det = el.querySelector('.vdetails');
-    det.hidden = false;
-    det.querySelector('.vlist').innerHTML = views.map((v) => `<div class="v">
-      <span>${esc(fmtDate(v.startedAt))}</span>
-      <span>${fmtDuration(v.seconds)}</span>
-      <span>${v.maxPage ? `tot pagina ${v.maxPage}${b.pageCount ? ` van ${b.pageCount}` : ''}` : 'alleen omslag'}</span>
-      <span>${esc([v.name, v.device, v.country].filter(Boolean).join(' · '))}</span>
-    </div>`).join('');
-  }
-  const comments = await api(`/api/books/${b.id}/comments`);
-  const list = el.querySelector('.clist');
-  const open = comments.filter((c) => !c.resolved).length;
-  el.querySelector('summary').innerHTML = `Opmerkingen (${comments.length})${open ? `<span class="badge">${open} open</span>` : ''}`;
-  if (open) el.querySelector('details').open = true;
-  if (!comments.length) list.innerHTML = '<div class="sub" style="padding:8px 0">Nog geen opmerkingen.</div>';
-  comments.forEach((c, i) => {
+  drawer.classList.add('open');
+  $('scrim').classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+function spineLine(b) {
+  const el = drawer.querySelector('[data-spine]');
+  if (el) el.textContent = `Rugdikte ca. ${spineMm(b.binding, b.pageCount || 40).toFixed(1).replace('.', ',')} mm bij ${b.pageCount || '?'} pagina's`;
+}
+
+function fillDrawerLists(entry) {
+  const b = entry.meta, link = `${location.origin}/b/${b.id}`;
+  const vEl = drawer.querySelector('[data-views]'), cEl = drawer.querySelector('[data-comments]');
+  if (!vEl) return;
+  vEl.innerHTML = entry.views.length ? entry.views.map((v) => `<div class="row"><div class="grow">
+      <div>${esc(fmtDate(v.startedAt))}</div>
+      <div class="sub">${fmtDuration(v.seconds)} · ${v.maxPage ? `tot pagina ${v.maxPage}${b.pageCount ? ` van ${b.pageCount}` : ''}` : 'alleen omslag'}${[v.name, v.device, v.country].filter(Boolean).length ? ' · ' + esc([v.name, v.device, v.country].filter(Boolean).join(' · ')) : ''}</div>
+    </div></div>`).join('') : '<div class="none">Nog niet bekeken. Je eigen bezoeken vanuit deze browser tellen niet mee.</div>';
+
+  cEl.innerHTML = entry.comments.length ? '' : '<div class="none">Nog geen opmerkingen.</div>';
+  entry.comments.forEach((c, i) => {
     const row = document.createElement('div');
-    row.className = 'c' + (c.resolved ? ' done' : '');
-    row.innerHTML = `<div><div class="sub"><b>${esc(c.author)}</b> · ${c.page ? `pagina ${c.page}${c.x != null ? ` (speld #${i + 1})` : ''}` : 'algemeen'} · ${fmtDate(c.createdAt)}</div><div class="t">${esc(c.text)}</div></div>
-      <div class="acts">${c.page ? `<a class="btn" target="_blank" href="${link}#p${c.page}">Bekijk</a>` : ''}<button class="btn" data-a="res">${c.resolved ? 'Heropenen' : 'Afgehandeld'}</button><button class="btn danger" data-a="del">✕</button></div>`;
-    row.querySelector('[data-a=res]').onclick = async () => { await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'PATCH', body: JSON.stringify({ resolved: !c.resolved }) }); load(); };
-    row.querySelector('[data-a=del]').onclick = async () => { if (confirm('Opmerking verwijderen?')) { await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'DELETE' }); load(); } };
-    list.appendChild(row);
+    row.className = 'row' + (c.resolved ? ' done' : '');
+    row.innerHTML = `<div class="grow"><div class="sub"><b>${esc(c.author)}</b> · ${c.page ? `pagina ${c.page}${c.x != null ? ` (speld #${i + 1})` : ''}` : 'algemeen'} · ${fmtDate(c.createdAt)}</div><div class="t">${esc(c.text)}</div></div>
+      <div class="acts">${c.page ? `<a class="btn ghost sm" target="_blank" href="${link}#p${c.page}">Bekijk</a>` : ''}<button class="btn sm" data-a="res">${c.resolved ? 'Heropenen' : 'Afgehandeld'}</button><button class="btn ghost sm danger" data-a="del" aria-label="Verwijderen">✕</button></div>`;
+    row.querySelector('[data-a=res]').onclick = async () => {
+      Object.assign(c, await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'PATCH', body: JSON.stringify({ resolved: !c.resolved }) }));
+      fillChips(entry);
+    };
+    row.querySelector('[data-a=del]').onclick = async () => {
+      if (!confirm('Opmerking verwijderen?')) return;
+      await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'DELETE' });
+      entry.comments = entry.comments.filter((x) => x !== c);
+      fillChips(entry);
+    };
+    cEl.appendChild(row);
   });
-  return el;
 }
 
 load().catch((e) => { $('books').innerHTML = `<div class="empty">Laden mislukt: ${esc(e.message)}</div>`; });

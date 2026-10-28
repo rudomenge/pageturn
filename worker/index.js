@@ -3,6 +3,7 @@
 //   books/<id>/book.pdf
 //   books/<id>/meta.json
 //   books/<id>/comments/<tijdstip>_<cid>.json   (één object per opmerking, dus geen schrijfconflicten)
+//   books/<id>/cover.jpg                          (voorkant als plaatje voor de 3D-thumbnail)
 
 const BINDINGS = ['hardcover', 'softcover', 'magazine'];
 const COVER_MODES = ['outer', 'full', 'none'];
@@ -15,8 +16,8 @@ const err = (status, error) => json({ error }, status);
 const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 function publicMeta(meta) {
-  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, createdAt } = meta;
-  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, createdAt };
+  const { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt } = meta;
+  return { id, title, binding, coverColor, coverMode, allowDownload, allowComments, allowBindingSwitch, pageCount, trim, pageSize, coverVersion, createdAt };
 }
 
 function cleanSettings(body, meta) {
@@ -25,10 +26,18 @@ function cleanSettings(body, meta) {
   if (BINDINGS.includes(body.binding)) out.binding = body.binding;
   if (typeof body.coverColor === 'string' && /^(#[0-9a-f]{6}|auto)$/i.test(body.coverColor)) out.coverColor = body.coverColor;
   if (COVER_MODES.includes(body.coverMode)) out.coverMode = body.coverMode;
+  const ps = typeof body.pageSize === 'string' ? safeJson(body.pageSize) : body.pageSize;
+  if (ps && [ps.widthMm, ps.heightMm].every((v) => Number.isFinite(+v) && +v >= 10 && +v <= 2000)) {
+    out.pageSize = { widthMm: Math.round(+ps.widthMm * 10) / 10, heightMm: Math.round(+ps.heightMm * 10) / 10 };
+  }
   for (const k of ['allowDownload', 'allowComments', 'allowBindingSwitch']) {
     if (k in body) out[k] = body[k] === true || body[k] === 'true' || body[k] === 'on';
   }
   return out;
+}
+
+function safeJson(s) {
+  try { return JSON.parse(s); } catch { return null; }
 }
 
 // Afloop zoals de beheerpagina hem in de browser heeft gemeten (in pt).
@@ -241,6 +250,18 @@ async function handle(request, env) {
         return json({ ok: true });
       }
     }
+    // Voorkant als JPEG, gemaakt in de browser van de beheerder.
+    if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/cover$/)) && method === 'PUT') {
+      const meta = await loadBook(env, m[1]);
+      if (!meta) return err(404, 'Boek niet gevonden');
+      const len = Number(request.headers.get('Content-Length') || 0);
+      if (!request.body || !len || len > 3_000_000) return err(400, 'Ongeldig plaatje');
+      const type = request.headers.get('Content-Type') === 'image/png' ? 'image/png' : 'image/jpeg';
+      await env.BOOKS.put(`books/${meta.id}/cover.jpg`, request.body, { httpMetadata: { contentType: type } });
+      meta.coverVersion = Date.now();
+      await env.BOOKS.put(`books/${meta.id}/meta.json`, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' } });
+      return json(meta);
+    }
     if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/views$/)) && method === 'GET') {
       if (!(await loadBook(env, m[1]))) return err(404, 'Boek niet gevonden');
       return json(await listViews(env, m[1]));
@@ -290,6 +311,15 @@ async function handle(request, env) {
   }
   // De viewer gebruikt relatieve paden, dus /b/viewer.css enz. komen uit public/.
   if (pathname.startsWith('/b/')) return serveAsset(request, env, pathname.slice(2));
+
+  if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)\/cover$/)) && (method === 'GET' || method === 'HEAD')) {
+    if (!validId(m[1])) return err(404, 'Geen voorkant');
+    const obj = await env.BOOKS.get(`books/${m[1]}/cover.jpg`);
+    if (!obj) return err(404, 'Geen voorkant');
+    return new Response(method === 'HEAD' ? null : obj.body, {
+      headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=300', ETag: obj.httpEtag },
+    });
+  }
 
   if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)(\/pdf|\/comments)?$/))) {
     const meta = await loadBook(env, m[1]);
