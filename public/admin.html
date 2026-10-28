@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bladerboek beheer</title>
+<style>
+  :root { --ink:#1d1b18; --muted:#6d675e; --line:#e3ddd2; --bg:#f6f3ee; --accent:#b5532b; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); }
+  header { padding: 22px 24px 8px; max-width: 1000px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { max-width: 1000px; margin: 0 auto; padding: 12px 24px 60px; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-decoration: none; font-size: 14px; color: inherit; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: #a3271b; }
+  .upload { background: #fff; border: 2px dashed #cfc5b4; border-radius: 14px; padding: 22px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .upload.over { border-color: var(--accent); }
+  .upload strong { display: block; font-size: 16px; }
+  .upload span { color: var(--muted); font-size: 14px; }
+  .upload .grow { flex: 1; min-width: 200px; }
+  .progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); }
+  .book { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
+  .book-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .book-head h2 { margin: 0 0 2px; font-size: 17px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .share { display: flex; gap: 6px; margin: 12px 0; }
+  .share input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #faf8f4; font-size: 14px; }
+  .settings { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; }
+  .settings label { display: inline-flex; gap: 6px; align-items: center; }
+  .settings select, .settings input[type=text] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+  .c { border-top: 1px solid var(--line); padding: 9px 0; display: flex; gap: 10px; justify-content: space-between; }
+  .c .t { white-space: pre-wrap; font-size: 14px; overflow-wrap: anywhere; }
+  .c.done .t { color: var(--muted); text-decoration: line-through; }
+  .c .acts { display: flex; gap: 6px; flex: none; align-items: flex-start; }
+  .c .acts .btn { padding: 4px 8px; font-size: 12px; }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .badge { background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bladerboek</h1>
+  <p>Upload een PDF, kies de uitvoering en stuur je klant de deellink.</p>
+</header>
+<main>
+  <div class="upload" id="upload">
+    <div class="grow">
+      <strong>Nieuw boek uploaden</strong>
+      <span>Sleep een PDF hierheen of kies een bestand. Afloop (TrimBox) wordt automatisch weggesneden.</span>
+      <div class="progress" id="progress"><i></i></div>
+    </div>
+    <select id="newBinding">
+      <option value="hardcover">Hardcover</option>
+      <option value="softcover">Softcover</option>
+      <option value="magazine">Magazine</option>
+    </select>
+    <select id="newCover">
+      <option value="outer">Eerste en laatste pagina zijn de omslag</option>
+      <option value="full">Omslag én binnenkant omslag in PDF</option>
+      <option value="none">Geen omslag in de PDF</option>
+    </select>
+    <label class="btn primary">PDF kiezen<input type="file" id="file" accept="application/pdf,.pdf" hidden></label>
+  </div>
+  <div id="books"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...(opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+
+function upload(file) {
+  if (!file) return;
+  const fd = new FormData();
+  // Velden vóór het bestand, zodat de server ze al kent tijdens het opslaan.
+  fd.append('binding', $('newBinding').value);
+  fd.append('coverMode', $('newCover').value);
+  fd.append('pdf', file);
+  const xhr = new XMLHttpRequest();
+  const bar = $('progress');
+  bar.style.display = 'block';
+  xhr.upload.onprogress = (e) => { bar.firstElementChild.style.width = (e.loaded / e.total) * 100 + '%'; };
+  xhr.onload = () => {
+    bar.style.display = 'none';
+    if (xhr.status >= 300) alert('Uploaden mislukt: ' + xhr.responseText);
+    load();
+  };
+  xhr.open('POST', '/api/admin/books');
+  xhr.send(fd);
+}
+
+$('file').addEventListener('change', (e) => upload(e.target.files[0]));
+const up = $('upload');
+['dragenter', 'dragover'].forEach((ev) => up.addEventListener(ev, (e) => { e.preventDefault(); up.classList.add('over'); }));
+up.addEventListener('dragleave', () => up.classList.remove('over'));
+up.addEventListener('drop', (e) => { e.preventDefault(); up.classList.remove('over'); upload(e.dataTransfer.files[0]); });
+
+async function load() {
+  const books = await api('/api/admin/books');
+  const wrap = $('books');
+  if (!books.length) { wrap.innerHTML = '<div class="empty">Nog geen boeken. Upload je eerste PDF hierboven.</div>'; return; }
+  wrap.innerHTML = '';
+  for (const b of books) wrap.appendChild(await bookCard(b));
+}
+
+async function bookCard(b) {
+  const link = `${location.origin}/b/${b.id}`;
+  const el = document.createElement('div');
+  el.className = 'book';
+  el.innerHTML = `
+    <div class="book-head">
+      <div>
+        <h2>${esc(b.title)}</h2>
+        <div class="sub">${b.pageCount || '?'} pagina's · ${(b.size / 1048576).toFixed(1)} MB · ${fmtDate(b.createdAt)}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <a class="btn" href="${link}" target="_blank">Bekijken</a>
+        <button class="btn danger" data-act="delete">Verwijderen</button>
+      </div>
+    </div>
+    <div class="share"><input readonly value="${esc(link)}"><button class="btn" data-act="copy">Link kopiëren</button></div>
+    <div class="settings">
+      <label>Titel <input type="text" data-k="title" value="${esc(b.title)}"></label>
+      <label>Uitvoering <select data-k="binding">
+        ${['hardcover', 'softcover', 'magazine'].map((v) => `<option value="${v}" ${b.binding === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}
+      </select></label>
+      <label>Omslag <select data-k="coverMode">
+        <option value="outer" ${b.coverMode === 'outer' ? 'selected' : ''}>Eerste en laatste pagina</option>
+        <option value="full" ${b.coverMode === 'full' ? 'selected' : ''}>Incl. binnenkant omslag</option>
+        <option value="none" ${b.coverMode === 'none' ? 'selected' : ''}>Geen omslag in PDF</option>
+      </select></label>
+      <label>Kaftkleur <input type="checkbox" data-k="autoColor" ${b.coverColor === 'auto' ? 'checked' : ''}> automatisch
+        <input type="color" data-k="coverColor" value="${b.coverColor === 'auto' ? '#1f2a44' : b.coverColor}" ${b.coverColor === 'auto' ? 'disabled' : ''}></label>
+      <label><input type="checkbox" data-k="allowDownload" ${b.allowDownload ? 'checked' : ''}> Downloaden toestaan</label>
+      <label><input type="checkbox" data-k="allowComments" ${b.allowComments ? 'checked' : ''}> Opmerkingen toestaan</label>
+      <label><input type="checkbox" data-k="allowBindingSwitch" ${b.allowBindingSwitch ? 'checked' : ''}> Klant mag uitvoering wisselen</label>
+    </div>
+    <details ${b.openCount ? 'open' : ''}><summary>Opmerkingen (${b.commentCount})${b.openCount ? `<span class="badge">${b.openCount} open</span>` : ''}</summary><div class="clist"></div></details>`;
+
+  el.querySelector('[data-act=copy]').onclick = async (e) => {
+    await navigator.clipboard.writeText(link).catch(() => el.querySelector('.share input').select());
+    e.target.textContent = 'Gekopieerd!';
+    setTimeout(() => (e.target.textContent = 'Link kopiëren'), 1500);
+  };
+  el.querySelector('[data-act=delete]').onclick = async () => {
+    if (!confirm(`"${b.title}" en alle opmerkingen verwijderen?`)) return;
+    await api(`/api/admin/books/${b.id}`, { method: 'DELETE' });
+    load();
+  };
+  el.querySelectorAll('[data-k]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const k = input.dataset.k;
+      let body;
+      if (k === 'autoColor') {
+        el.querySelector('[data-k=coverColor]').disabled = input.checked;
+        body = { coverColor: input.checked ? 'auto' : el.querySelector('[data-k=coverColor]').value };
+      } else body = { [k]: input.type === 'checkbox' ? input.checked : input.value };
+      await api(`/api/admin/books/${b.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      if (k === 'title') el.querySelector('h2').textContent = input.value;
+    });
+  });
+
+  const comments = await api(`/api/books/${b.id}/comments`);
+  const list = el.querySelector('.clist');
+  if (!comments.length) list.innerHTML = '<div class="sub" style="padding:8px 0">Nog geen opmerkingen.</div>';
+  comments.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'c' + (c.resolved ? ' done' : '');
+    row.innerHTML = `<div><div class="sub"><b>${esc(c.author)}</b> · ${c.page ? `pagina ${c.page}${c.x != null ? ` (speld #${i + 1})` : ''}` : 'algemeen'} · ${fmtDate(c.createdAt)}</div><div class="t">${esc(c.text)}</div></div>
+      <div class="acts">${c.page ? `<a class="btn" target="_blank" href="${link}#p${c.page}">Bekijk</a>` : ''}<button class="btn" data-a="res">${c.resolved ? 'Heropenen' : 'Afgehandeld'}</button><button class="btn danger" data-a="del">✕</button></div>`;
+    row.querySelector('[data-a=res]').onclick = async () => { await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'PATCH', body: JSON.stringify({ resolved: !c.resolved }) }); load(); };
+    row.querySelector('[data-a=del]').onclick = async () => { if (confirm('Opmerking verwijderen?')) { await api(`/api/admin/books/${b.id}/comments/${c.id}`, { method: 'DELETE' }); load(); } };
+    list.appendChild(row);
+  });
+  return el;
+}
+
+load().catch((e) => { $('books').innerHTML = `<div class="empty">Laden mislukt: ${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>

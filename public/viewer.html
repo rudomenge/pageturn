@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bladerboek</title>
+<link rel="stylesheet" href="viewer.css">
+<script src="vendor/page-flip.browser.js"></script>
+</head>
+<body class="env-desk">
+<header class="topbar">
+  <div class="title" id="bookTitle">Bladerboek</div>
+  <div class="controls">
+    <div class="seg" id="bindingSeg" role="group" aria-label="Uitvoering">
+      <button data-binding="hardcover">Hardcover</button>
+      <button data-binding="softcover">Softcover</button>
+      <button data-binding="magazine">Magazine</button>
+    </div>
+    <select id="envSelect" aria-label="Omgeving">
+      <option value="desk">Houten tafel</option>
+      <option value="studio">Lichte studio</option>
+      <option value="dark">Donker</option>
+      <option value="linen">Linnen</option>
+    </select>
+    <a class="btn" id="downloadBtn" hidden download>
+      <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg><span>PDF downloaden</span>
+    </a>
+    <button class="btn" id="commentsBtn" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Opmerkingen</span><b id="commentCount"></b>
+    </button>
+    <button class="btn icon" id="fullscreenBtn" title="Volledig scherm">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="stage" id="stage">
+    <div class="dropzone" id="dropzone" hidden>
+      <div class="dz-inner">
+        <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M12 11v6m-3-3h6"/></svg>
+        <h1>Sleep je PDF hierheen</h1>
+        <p>of <label class="link">kies een bestand<input type="file" id="fileInput" accept="application/pdf,.pdf" hidden></label></p>
+        <label class="check"><select id="coverModeSelect">
+          <option value="outer">Eerste en laatste pagina zijn de omslag</option>
+          <option value="full">Omslag én binnenkant omslag zitten in de PDF</option>
+          <option value="none">Geen omslag in de PDF</option>
+        </select></label>
+      </div>
+    </div>
+
+    <div class="loading" id="loading" hidden>
+      <div class="spinner"></div>
+      <div id="loadingText">Boek wordt geladen…</div>
+      <div class="bar"><i id="loadingBar"></i></div>
+    </div>
+
+    <div class="book-area" id="bookArea">
+      <div class="book-host" id="bookHost">
+        <div class="board board-left" id="boardLeft"></div>
+        <div class="board board-right" id="boardRight"></div>
+        <div class="block block-left" id="blockLeft"></div>
+        <div class="block block-right" id="blockRight"></div>
+        <div class="flip-root-slot" id="flipSlot"></div>
+        <div class="staples" id="staples"><i></i><i></i></div>
+        <div class="pin-layer" id="pinLayer"></div>
+        <div class="pick-layer" id="pickLayer" hidden></div>
+      </div>
+    </div>
+
+    <div class="navbar" id="navbar" hidden>
+      <div class="placard" id="placard" hidden>
+        <div class="pl-title" id="plTitle"></div>
+        <div class="pl-line" id="plFormat"></div>
+        <div class="pl-line" id="plExtent"></div>
+      </div>
+      <div class="nav-controls">
+      <button class="nav" id="firstBtn" title="Naar omslag">⇤</button>
+      <button class="nav" id="prevBtn" title="Vorige">‹</button>
+      <input type="range" id="pageSlider" min="0" max="0" value="0" aria-label="Pagina">
+      <span class="pageinfo" id="pageInfo"></span>
+      <button class="nav" id="nextBtn" title="Volgende">›</button>
+      <button class="nav" id="lastBtn" title="Naar achterkant">⇥</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel" id="panel" hidden>
+    <div class="panel-head">
+      <h2>Opmerkingen</h2>
+      <button class="btn icon" id="closePanel" title="Sluiten">✕</button>
+    </div>
+    <div class="filters" id="filters">
+      <button data-filter="spread" class="on">Deze pagina's</button>
+      <button data-filter="all">Alle</button>
+      <button data-filter="general">Algemeen</button>
+    </div>
+    <ul class="comments" id="commentList"></ul>
+    <form class="compose" id="composeForm">
+      <button type="button" class="btn pin-btn" id="pinBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 1112 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>
+        Prik een opmerking op de pagina
+      </button>
+      <label>Over
+        <select id="aboutSelect"></select>
+      </label>
+      <textarea id="commentText" rows="3" placeholder="Schrijf een opmerking…" required></textarea>
+      <div class="row">
+        <input id="authorInput" placeholder="Je naam" autocomplete="name">
+        <button class="btn primary" type="submit">Plaatsen</button>
+      </div>
+    </form>
+  </aside>
+</main>
+
+<div class="popover" id="pinPopover" hidden>
+  <div class="pp-title" id="pinPopTitle">Opmerking op pagina</div>
+  <textarea id="pinText" rows="3" placeholder="Wat wil je hier opmerken?"></textarea>
+  <input id="pinAuthor" placeholder="Je naam" autocomplete="name">
+  <div class="row">
+    <button class="btn" id="pinCancel" type="button">Annuleren</button>
+    <button class="btn primary" id="pinSave" type="button">Plaatsen</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="viewer.js"></script>
+</body>
+</html>
