@@ -161,7 +161,6 @@ async function openPdf(src) {
   $('downloadBtn').href = state.downloadUrl || '#';
   if (state.downloadName) $('downloadBtn').download = state.downloadName;
   $('bindingSeg').hidden = !state.meta.allowBindingSwitch;
-  if (state.meta.allowComments && window.innerWidth > 1100) $('panel').hidden = false;
   updateBindingButtons();
   const hash = location.hash.match(/^#p(\d+)$/);
   const start = hash ? state.pages.findIndex((p) => p.pdfPage === +hash[1]) : 0;
@@ -693,6 +692,7 @@ function renderPins() {
 
 function setPinMode(on) {
   state.pinMode = on;
+  if (on) closePanel(); // popup opzij, zodat je het boek kunt aanklikken
   $('pinBtn').classList.toggle('on', on);
   $('pinBtn').lastChild.textContent = on ? ' Klik nu op de plek in het boek…' : ' Prik een opmerking op de pagina';
   updatePickLayer();
@@ -770,7 +770,11 @@ function updateAboutSelect() {
 
 function openPanel() {
   $('panel').hidden = false;
-  relayoutSoon();
+  $('commentsBtn').setAttribute('aria-expanded', 'true');
+}
+function closePanel() {
+  $('panel').hidden = true;
+  $('commentsBtn').setAttribute('aria-expanded', 'false');
 }
 
 function syncFilterButtons() {
@@ -834,8 +838,8 @@ function setupUi() {
     if (e.key === 'Escape') { setPinMode(false); closePinPopover(); }
   });
 
-  $('commentsBtn').addEventListener('click', () => { $('panel').hidden ? openPanel() : ($('panel').hidden = true, relayoutSoon()); });
-  $('closePanel').addEventListener('click', () => { $('panel').hidden = true; setPinMode(false); relayoutSoon(); });
+  $('commentsBtn').addEventListener('click', () => { if ($('panel').hidden) openPanel(); else { closePanel(); setPinMode(false); } });
+  $('closePanel').addEventListener('click', () => { closePanel(); setPinMode(false); });
   $('filters').addEventListener('click', (e) => {
     const f = e.target.closest('button')?.dataset.filter;
     if (!f) return;

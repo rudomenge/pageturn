@@ -10,9 +10,6 @@
 <body class="env-desk">
 <header class="topbar">
   <div class="controls">
-    <button class="btn" id="commentsBtn" hidden>
-      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Opmerkingen</span><b id="commentCount"></b>
-    </button>
     <div class="menu">
       <button class="btn" id="menuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Opties</span>
@@ -85,6 +82,35 @@
       </div>
     </div>
 
+    <button class="comments-fab" id="commentsBtn" title="Opmerkingen" aria-label="Opmerkingen" aria-controls="panel" aria-expanded="false" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><b id="commentCount"></b>
+    </button>
+    <aside class="panel" id="panel" role="dialog" aria-label="Opmerkingen" hidden>
+      <div class="panel-head">
+        <h2>Opmerkingen</h2>
+        <button class="btn icon" id="closePanel" title="Sluiten">✕</button>
+      </div>
+      <div class="filters" id="filters">
+        <button data-filter="spread" class="on">Deze pagina's</button>
+        <button data-filter="all">Alle</button>
+        <button data-filter="general">Algemeen</button>
+      </div>
+      <ul class="comments" id="commentList"></ul>
+      <form class="compose" id="composeForm">
+        <button type="button" class="btn pin-btn" id="pinBtn">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 1112 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>
+          Prik een opmerking op de pagina
+        </button>
+        <label>Over
+          <select id="aboutSelect"></select>
+        </label>
+        <textarea id="commentText" rows="3" placeholder="Schrijf een opmerking…" required></textarea>
+        <div class="row">
+          <input id="authorInput" placeholder="Je naam" autocomplete="name">
+          <button class="btn primary" type="submit">Plaatsen</button>
+        </div>
+      </form>
+    </aside>
     <div class="navbar" id="navbar" hidden>
       <div class="key-hint" aria-hidden="true"><kbd>←</kbd><kbd>→</kbd><span>bladeren met de pijltjestoetsen</span></div>
       <div class="nav-controls">
@@ -103,32 +129,6 @@
     </div>
   </section>
 
-  <aside class="panel" id="panel" hidden>
-    <div class="panel-head">
-      <h2>Opmerkingen</h2>
-      <button class="btn icon" id="closePanel" title="Sluiten">✕</button>
-    </div>
-    <div class="filters" id="filters">
-      <button data-filter="spread" class="on">Deze pagina's</button>
-      <button data-filter="all">Alle</button>
-      <button data-filter="general">Algemeen</button>
-    </div>
-    <ul class="comments" id="commentList"></ul>
-    <form class="compose" id="composeForm">
-      <button type="button" class="btn pin-btn" id="pinBtn">
-        <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 1112 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>
-        Prik een opmerking op de pagina
-      </button>
-      <label>Over
-        <select id="aboutSelect"></select>
-      </label>
-      <textarea id="commentText" rows="3" placeholder="Schrijf een opmerking…" required></textarea>
-      <div class="row">
-        <input id="authorInput" placeholder="Je naam" autocomplete="name">
-        <button class="btn primary" type="submit">Plaatsen</button>
-      </div>
-    </form>
-  </aside>
 </main>
 
 <div class="popover" id="pinPopover" hidden>

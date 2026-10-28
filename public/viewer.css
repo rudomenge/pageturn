@@ -241,14 +241,38 @@ kbd {
 .bar i { display: block; height: 100%; width: 0; background: #fff; transition: width .2s; }
 
 /* Opmerkingenpaneel */
-.panel { width: 340px; flex: none; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 15; }
+/* Rond knopje rechtsboven met de opmerkingen als popup */
+.comments-fab {
+  position: absolute; top: 14px; right: 14px; z-index: 45; width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.9); color: var(--ink);
+  box-shadow: 0 3px 12px rgba(0,0,0,.22); transition: transform .15s, background .15s;
+}
+.comments-fab[hidden] { display: none; }
+.comments-fab:hover { transform: scale(1.06); background: #fff; }
+.comments-fab[aria-expanded="true"] { background: var(--ink); color: #fff; }
+.comments-fab svg { width: 20px; height: 20px; }
+.comments-fab b {
+  position: absolute; top: -3px; right: -3px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff;
+}
+.comments-fab b:empty { display: none; }
+.panel {
+  position: absolute; top: 70px; right: 14px; z-index: 44; width: 340px; max-height: min(600px, calc(100% - 150px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  display: flex; flex-direction: column; box-shadow: 0 18px 50px rgba(0,0,0,.3);
+  transform-origin: top right; animation: pop-in .18s ease-out;
+}
+@keyframes pop-in { from { opacity: 0; transform: scale(.92) translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
 .panel[hidden] { display: none; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 6px; }
 .panel-head h2 { margin: 0; font-size: 16px; }
 .filters { display: flex; gap: 6px; padding: 4px 14px 10px; border-bottom: 1px solid var(--line); }
 .filters button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
 .filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-.comments { list-style: none; margin: 0; padding: 8px 14px; overflow-y: auto; flex: 1; }
+.comments { list-style: none; margin: 0; padding: 8px 14px; overflow-y: auto; flex: 1; min-height: 80px; }
 .comments li { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: default; }
 .comments li.has-page { cursor: pointer; }
 .comments li.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(181,83,43,.15); }
@@ -291,7 +315,8 @@ body.fs .topbar:hover { opacity: 1; }
   .btn span { display: none; }
   .topbar { flex-wrap: nowrap; }
   .controls { flex-wrap: nowrap; flex: none; }
-  .panel { position: fixed; inset: auto 0 0 0; width: auto; height: 62vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.25); z-index: 60; }
+  .panel { left: 10px; right: 10px; top: 66px; width: auto; max-height: calc(100% - 140px); }
+  .comments-fab { top: 10px; right: 10px; width: 42px; height: 42px; }
   .navbar input[type=range] { width: 30vw; }
   .nav-controls { gap: 8px; }
   .navbar #firstBtn, .navbar #lastBtn { display: none; }
