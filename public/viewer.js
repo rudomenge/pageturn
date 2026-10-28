@@ -166,6 +166,7 @@ async function openPdf(src) {
   const start = hash ? state.pages.findIndex((p) => p.pdfPage === +hash[1]) : 0;
   build(Math.max(0, start));
   pumpQueue();
+  startViewTracking();
 }
 
 function setLoading(text, frac) {
@@ -418,6 +419,7 @@ function onPageChange(instant) {
   updateDecor();
   renderComments();
   updateAboutSelect();
+  noteViewedPages();
 }
 
 function visibleSides() {
@@ -560,6 +562,52 @@ function updatePlacard() {
   const spine = state.binding === 'magazine' ? 'geniet' : `rug ca. ${spineMm < 10 ? spineMm.toFixed(1).replace('.', ',') : Math.round(spineMm)} mm`;
   $('plExtent').textContent = `${state.pdfPageCount} pagina's · ${b.label} · ${spine}`;
   $('placard').hidden = false;
+}
+
+// ---------- Bekeken-registratie ----------
+// Alleen bij een deellink, en niet als de eigenaar zelf kijkt (de beheerpagina zet een vlag in deze browser).
+const view = { id: null, seconds: 0, maxPage: 0, sent: '', lastTick: 0 };
+
+function isOwnerBrowser() {
+  try { return localStorage.getItem('bladerboek:owner') === '1'; } catch { return false; }
+}
+
+async function startViewTracking() {
+  if (state.mode !== 'server' || isOwnerBrowser() || new URLSearchParams(location.search).has('voorbeeld')) return;
+  try {
+    const res = await fetch(`/api/books/${state.bookId}/views`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxPage: view.maxPage }),
+    });
+    if (!res.ok) return;
+    view.id = (await res.json()).id;
+  } catch { return; }
+  view.lastTick = Date.now();
+  setInterval(() => { tickView(); sendView(false); }, 20000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { tickView(); sendView(true); } else view.lastTick = Date.now();
+  });
+  window.addEventListener('pagehide', () => { tickView(); sendView(true); });
+}
+
+function tickView() {
+  if (!view.lastTick || document.hidden) return;
+  const now = Date.now();
+  view.seconds += Math.min(60, (now - view.lastTick) / 1000);
+  view.lastTick = now;
+}
+
+function noteViewedPages() {
+  for (const n of visiblePdfPages()) view.maxPage = Math.max(view.maxPage, n);
+}
+
+function sendView(beacon) {
+  if (!view.id) return;
+  const body = JSON.stringify({ seconds: Math.round(view.seconds), maxPage: view.maxPage, name: savedAuthor() || undefined });
+  if (body === view.sent) return;
+  view.sent = body;
+  const url = `/api/books/${state.bookId}/views/${encodeURIComponent(view.id)}`;
+  if (beacon && navigator.sendBeacon) navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+  else fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
 }
 
 // ---------- Opmerkingen ----------

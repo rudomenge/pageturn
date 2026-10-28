@@ -93,6 +93,25 @@ async function listComments(env, id) {
 
 const stripKey = ({ _key, ...c }) => c;
 
+// Bekeken-registratie: één object per bezoek, zonder IP-adres.
+const VIEW_ID = /^\d{4}-\d\d-\d\dT[\d:.]+Z_[a-f0-9]{8}$/;
+function deviceOf(ua = '') {
+  if (/iPad|Tablet/i.test(ua)) return 'tablet';
+  if (/Mobi|Android|iPhone/i.test(ua)) return 'mobiel';
+  return 'computer';
+}
+async function listViews(env, id) {
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.BOOKS.list({ prefix: `books/${id}/views/`, cursor });
+    keys.push(...page.objects.map((o) => o.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  keys.sort().reverse();
+  return (await Promise.all(keys.slice(0, 200).map(async (k) => (await env.BOOKS.get(k))?.json()))).filter(Boolean);
+}
+
 async function deletePrefix(env, prefix) {
   let cursor;
   do {
@@ -222,7 +241,46 @@ async function handle(request, env) {
         return json({ ok: true });
       }
     }
+    if ((m = pathname.match(/^\/api\/admin\/books\/([a-z0-9]+)\/views$/)) && method === 'GET') {
+      if (!(await loadBook(env, m[1]))) return err(404, 'Boek niet gevonden');
+      return json(await listViews(env, m[1]));
+    }
     return err(404, 'Onbekend adres');
+  }
+
+  // Bezoek registreren (start) en bijwerken (hoe lang, tot welke pagina).
+  if ((m = pathname.match(/^\/api\/books\/([a-z0-9]+)\/views(?:\/([^/]+))?$/)) && method === 'POST') {
+    if (!(await loadBook(env, m[1]))) return err(404, 'Boek niet gevonden');
+    const b = await request.json().catch(() => ({}));
+    const maxPage = Number.isInteger(b.maxPage) && b.maxPage > 0 && b.maxPage < 10000 ? b.maxPage : 0;
+    const seconds = Number.isFinite(b.seconds) ? Math.min(6 * 3600, Math.max(0, Math.round(b.seconds))) : 0;
+    if (!m[2]) {
+      const startedAt = new Date().toISOString();
+      const view = {
+        id: `${startedAt}_${randomHex(4)}`,
+        startedAt,
+        lastSeen: startedAt,
+        seconds: 0,
+        maxPage,
+        device: deviceOf(request.headers.get('User-Agent') || ''),
+        country: request.cf?.country || null,
+        name: null,
+      };
+      await env.BOOKS.put(`books/${m[1]}/views/${view.id}.json`, JSON.stringify(view));
+      return json({ id: view.id });
+    }
+    let vid = '';
+    try { vid = decodeURIComponent(m[2]); } catch {}
+    if (!VIEW_ID.test(vid)) return err(400, 'Onbekend bezoek');
+    const key = `books/${m[1]}/views/${vid}.json`;
+    const view = await (await env.BOOKS.get(key))?.json();
+    if (!view) return err(404, 'Onbekend bezoek');
+    view.seconds = Math.max(view.seconds, seconds);
+    view.maxPage = Math.max(view.maxPage, maxPage);
+    view.lastSeen = new Date().toISOString();
+    if (typeof b.name === 'string' && b.name.trim()) view.name = b.name.trim().slice(0, 80);
+    await env.BOOKS.put(key, JSON.stringify(view));
+    return json({ ok: true });
   }
 
   // ---- Klant (via deellink) ----

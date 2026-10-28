@@ -233,6 +233,38 @@ app.post('/api/books/:id/comments', (req, res) => {
   res.json(comment);
 });
 
+// ---- Bekeken-registratie (zelfde API als de Cloudflare-versie) ----
+const deviceOf = (ua = '') => (/iPad|Tablet/i.test(ua) ? 'tablet' : /Mobi|Android|iPhone/i.test(ua) ? 'mobiel' : 'computer');
+const viewsFile = (id) => path.join(bookDir(id), 'views.json');
+
+app.get('/api/admin/books/:id/views', requireAdmin, (req, res) => {
+  if (!loadBook(req.params.id)) return res.status(404).json({ error: 'Boek niet gevonden' });
+  res.json(readJson(viewsFile(req.params.id), []).slice().reverse().slice(0, 200));
+});
+
+app.post('/api/books/:id/views/:vid?', (req, res) => {
+  if (!loadBook(req.params.id)) return res.status(404).json({ error: 'Boek niet gevonden' });
+  const b = req.body || {};
+  const maxPage = Number.isInteger(b.maxPage) && b.maxPage > 0 && b.maxPage < 10000 ? b.maxPage : 0;
+  const seconds = Number.isFinite(b.seconds) ? Math.min(6 * 3600, Math.max(0, Math.round(b.seconds))) : 0;
+  const views = readJson(viewsFile(req.params.id), []);
+  if (!req.params.vid) {
+    const startedAt = new Date().toISOString();
+    const view = { id: `${startedAt}_${crypto.randomBytes(4).toString('hex')}`, startedAt, lastSeen: startedAt, seconds: 0, maxPage, device: deviceOf(req.headers['user-agent']), country: null, name: null };
+    views.push(view);
+    writeJson(viewsFile(req.params.id), views.slice(-5000));
+    return res.json({ id: view.id });
+  }
+  const view = views.find((v) => v.id === req.params.vid);
+  if (!view) return res.status(404).json({ error: 'Onbekend bezoek' });
+  view.seconds = Math.max(view.seconds, seconds);
+  view.maxPage = Math.max(view.maxPage, maxPage);
+  view.lastSeen = new Date().toISOString();
+  if (typeof b.name === 'string' && b.name.trim()) view.name = b.name.trim().slice(0, 80);
+  writeJson(viewsFile(req.params.id), views);
+  res.json({ ok: true });
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // De viewer gebruikt relatieve paden, zodat hij ook onder /b/<id> zijn bestanden vindt.
 app.use('/b', express.static(path.join(__dirname, 'public'), { index: false }));

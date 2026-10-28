@@ -42,6 +42,11 @@
   .c .acts { display: flex; gap: 6px; flex: none; align-items: flex-start; }
   .c .acts .btn { padding: 4px 8px; font-size: 12px; }
   .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .views { margin-top: 12px; display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.on { background: #3f9b5b; } .dot.off { background: #c9c1b4; }
+  .v { display: grid; grid-template-columns: 170px 150px 160px 1fr; gap: 8px; border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
+  @media (max-width: 700px) { .v { grid-template-columns: 1fr 1fr; } }
   .badge { background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }
 </style>
 </head>
@@ -75,6 +80,9 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDuration = (s) => (!s ? 'minder dan een minuut' : s < 60 ? `${s} sec` : `${Math.round(s / 60)} min`);
+// Deze browser is van de eigenaar: eigen bezoeken aan deellinks tellen niet mee als "bekeken".
+try { localStorage.setItem('bladerboek:owner', '1'); } catch {}
 const fmtDate = (iso) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 async function api(path, opts = {}) {
@@ -184,6 +192,8 @@ async function bookCard(b) {
       <label><input type="checkbox" data-k="allowComments" ${b.allowComments ? 'checked' : ''}> Opmerkingen toestaan</label>
       <label><input type="checkbox" data-k="allowBindingSwitch" ${b.allowBindingSwitch ? 'checked' : ''}> Klant mag uitvoering wisselen</label>
     </div>
+    <div class="views sub" data-views>Bekeken: laden…</div>
+    <details class="vdetails" hidden><summary>Bezoeken</summary><div class="vlist"></div></details>
     <details><summary>Opmerkingen</summary><div class="clist"></div></details>`;
 
   el.querySelector('[data-act=copy]').onclick = async (e) => {
@@ -209,6 +219,21 @@ async function bookCard(b) {
     });
   });
 
+  const views = await api(`/api/admin/books/${b.id}/views`).catch(() => []);
+  const vEl = el.querySelector('[data-views]');
+  if (!views.length) vEl.innerHTML = '<span class="dot off"></span>Nog niet bekeken';
+  else {
+    const last = views[0];
+    vEl.innerHTML = `<span class="dot on"></span><b>${views.length}× bekeken</b> · laatst ${esc(fmtDate(last.lastSeen || last.startedAt))}`;
+    const det = el.querySelector('.vdetails');
+    det.hidden = false;
+    det.querySelector('.vlist').innerHTML = views.map((v) => `<div class="v">
+      <span>${esc(fmtDate(v.startedAt))}</span>
+      <span>${fmtDuration(v.seconds)}</span>
+      <span>${v.maxPage ? `tot pagina ${v.maxPage}${b.pageCount ? ` van ${b.pageCount}` : ''}` : 'alleen omslag'}</span>
+      <span>${esc([v.name, v.device, v.country].filter(Boolean).join(' · '))}</span>
+    </div>`).join('');
+  }
   const comments = await api(`/api/books/${b.id}/comments`);
   const list = el.querySelector('.clist');
   const open = comments.filter((c) => !c.resolved).length;
