@@ -1,7 +1,7 @@
 // Bladerboek-viewer: rendert een PDF als boek met realistische pageturn (StPageFlip),
 // tekent papierblok, kaft en rug passend bij uitvoering en paginatal, en beheert opmerkingen.
 import * as pdfjsLib from './vendor/pdf.min.mjs';
-import { DEFAULT_HEADBANDS, headbandOf, headbandLabel, usableHeadbands } from './headbands.js';
+import { DEFAULT_HEADBANDS, headbandOf, usableHeadbands, mountHeadbandGrid } from './headbands.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
 
@@ -332,32 +332,12 @@ function setupEditMenu() {
 
 // Kapitaalband kiezen uit de lijst van de beheerpagina (of de standaardlijst), of een eigen kleur.
 async function setupHeadbandPicker(save) {
-  const sel = $('edHeadband'), custom = $('edHbCustom'), sw = $('edHbSwatch');
   let list = DEFAULT_HEADBANDS;
   try { list = usableHeadbands(await adminFetch('/api/admin/headbands')); } catch {}
-  const cur = headbandOf(state.meta);
-  const same = (h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || '');
-  sel.innerHTML = list.map((h, i) => `<option value="${i}">${escapeHtml(headbandLabel(h))}</option>`).join('') + '<option value="custom">Eigen kleur…</option>';
-  const idx = list.findIndex(same);
-  sel.value = idx >= 0 ? String(idx) : 'custom';
-  custom.hidden = idx >= 0;
-  custom.value = cur.colors[0];
-  const paint = (h) => {
-    sw.style.background = `repeating-linear-gradient(90deg, ${h.colors[0]} 0 3px, ${h.colors[1] || shade(h.colors[0], luminance(h.colors[0]) > 0.5 ? -0.3 : 0.25)} 3px 5px)`;
+  mountHeadbandGrid($('edHbGrid'), list, headbandOf(state.meta), async (h) => {
     applyHeadband(h);
-  };
-  paint(cur);
-  const choose = async (h) => {
-    paint(h);
     if (await save({ headband: h })) updatePlacard();
-  };
-  sel.addEventListener('change', () => {
-    custom.hidden = sel.value !== 'custom';
-    if (sel.value === 'custom') return choose({ code: '', name: '', colors: [custom.value] });
-    choose(list[+sel.value]);
-  });
-  custom.addEventListener('input', () => paint({ colors: [custom.value] }));
-  custom.addEventListener('change', () => choose({ code: '', name: '', colors: [custom.value] }));
+  }, applyHeadband);
 }
 
 function fillEditFiles() {
@@ -743,6 +723,7 @@ function updateDecor() {
   const boardPx = b.coverMm * pxPerMm;
   const ov = b.overhangMm ? Math.max(3, Math.min(14, b.overhangMm * pxPerMm)) : 0;
 
+  const openBoardGrow = Math.min(46, Math.round(Math.max(sheets.left, sheets.right) * paperMm() * pxPerMm));
   for (const side of ['left', 'right']) {
     const block = $(side === 'left' ? 'blockLeft' : 'blockRight');
     const board = $(side === 'left' ? 'boardLeft' : 'boardRight');
@@ -759,10 +740,13 @@ function updateDecor() {
     if (state.binding === 'hardcover') {
       // Gesloten: het bord ligt bovenop (de omslag zelf), dan papier, dan het achterbord.
       // Open: de pagina ligt op het papierblok, dat op het bord ligt.
-      const depth = closed ? 0 : paperPx;
       const layers = closed ? [[boardPx, coverEdge], [paperPx, 'paper'], [boardPx, coverEdge]] : [[boardPx, coverEdge]];
-      const bx = side === 'left' ? px - ov : px;
-      place(board, bx + dir * depth * 0.4, rect.top - ov + depth * 0.85, pw + ov, h + ov * 2);
+      // Open: beide borden liggen plat en even groot, ongeacht hoeveel papier er aan elke kant ligt.
+      // Ze worden net zo ver vergroot als de dikste papierrand (max. 46 px, zoals edgeShadows), zodat
+      // de onder- en buitenranden links en rechts gelijk lopen.
+      const grow = closed ? 0 : openBoardGrow;
+      const bx = side === 'left' ? px - ov - grow * 0.4 : px;
+      place(board, bx, rect.top - ov, pw + ov + grow * 0.4, h + ov * 2 + grow * 0.85);
       board.style.display = '';
       board.style.boxShadow = edgeShadows(layers, dir, true);
       block.style.display = closed ? 'none' : '';

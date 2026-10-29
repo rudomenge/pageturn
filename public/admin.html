@@ -153,10 +153,6 @@
   .pal-row input[data-off] { opacity: .35; }
   .pal-two { font-size: 13px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
   .pal-actions { display: flex; gap: 8px; padding: 14px 0 20px; }
-  .hb-pick { display: flex; align-items: center; gap: 8px; }
-  .hb-pick i { flex: none; width: 34px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); }
-  .hb-pick .field { flex: 1; }
-  .hb-pick input[type=color] { width: 38px; height: 30px; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: #fff; flex: none; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px;
     font-size: 13.5px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
   .toast.show { opacity: 1; transform: translateX(-50%); }
@@ -221,7 +217,7 @@
 
 <script type="module">
 import { renderBook3D, BINDINGS, PAPERS, spineMm, paperMmFor } from '/book3d.js';
-import { DEFAULT_HEADBANDS, headbandOf, headbandLabel, usableHeadbands } from '/headbands.js';
+import { DEFAULT_HEADBANDS, headbandOf, usableHeadbands, mountHeadbandGrid, headbandSwatch } from '/headbands.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -457,7 +453,7 @@ async function readColorProfile(entry) {
 
 // ---------- Kapitaalbanden (kleurenlijst) ----------
 let headbands = DEFAULT_HEADBANDS;
-const stripe = (h) => `repeating-linear-gradient(90deg, ${h.colors[0]} 0 3px, ${h.colors[1] || h.colors[0]} 3px 5px)`;
+const stripe = headbandSwatch;
 
 async function loadHeadbands() {
   headbands = usableHeadbands(await api('/api/admin/headbands').catch(() => null));
@@ -615,10 +611,7 @@ function openDrawer(entry) {
               <input type="color" data-k="coverColor" value="${auto ? '#1f2a44' : b.coverColor}" ${auto ? 'disabled' : ''}></div>
           </div>
         </div>
-        <label class="f" style="margin-top:12px">Kapitaalband (hardcover)
-          <div class="hb-pick"><i data-hbsw></i><select class="field" data-hb>${headbands.map((h, i) => `<option value="${i}">${esc(headbandLabel(h))}</option>`).join('')}<option value="custom">Eigen kleur…</option></select>
-          <input type="color" data-hbcustom value="${headbandOf(b).colors[0]}"></div>
-        </label>
+        <div class="f" style="margin-top:12px;font-size:12.5px;color:var(--muted);font-weight:520">Kapitaalband (hardcover)<div data-hbgrid></div></div>
         <div class="meta" data-spine style="margin-top:6px"></div>
       </div>
       <div class="d-sec" data-files></div>
@@ -832,22 +825,10 @@ function preflightHtml(label, r, b) {
 }
 
 function setupHeadbandPick(entry) {
-  const sel = drawer.querySelector('[data-hb]'), custom = drawer.querySelector('[data-hbcustom]'), sw = drawer.querySelector('[data-hbsw]');
-  const cur = headbandOf(entry.meta);
-  const idx = headbands.findIndex((h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || ''));
-  sel.value = idx >= 0 ? String(idx) : 'custom';
-  custom.hidden = idx >= 0;
-  sw.style.background = stripe(cur);
-  const saveHb = async (h) => {
-    sw.style.background = stripe(h);
+  mountHeadbandGrid(drawer.querySelector('[data-hbgrid]'), headbands, headbandOf(entry.meta), async (h) => {
     entry.meta = await api(`/api/admin/books/${entry.meta.id}`, { method: 'PATCH', body: JSON.stringify({ headband: h }) });
     toast('Opgeslagen');
-  };
-  sel.onchange = () => {
-    custom.hidden = sel.value !== 'custom';
-    saveHb(sel.value === 'custom' ? { code: '', name: '', colors: [custom.value] } : headbands[+sel.value]);
-  };
-  custom.onchange = () => saveHb({ code: '', name: '', colors: [custom.value] });
+  });
 }
 
 function spineLine(b) {

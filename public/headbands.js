@@ -58,3 +58,55 @@ export function headbandOf(meta) {
 export const usableHeadbands = (stored) => (Array.isArray(stored) && stored.some((h) => h.code) ? stored : DEFAULT_HEADBANDS);
 
 export const headbandLabel = (h) => [h.name, h.code].filter(Boolean).join(' ') || h.colors.join('/');
+
+// Staaltje zoals een kapitaalband eruitziet: een rond gestikt randje, gestreept als er twee kleuren zijn.
+export function headbandSwatch(h) {
+  const [a, b] = h.colors;
+  const base = b ? `repeating-linear-gradient(90deg, ${a} 0 4px, ${b} 4px 8px)` : a;
+  return `linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 40%, rgba(0,0,0,.18)), ${base}`;
+}
+
+const GRID_CSS = `
+.hb-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px 6px; max-height: 232px; overflow-y: auto; padding: 4px 2px 2px; margin-top: 6px; }
+.hb-sw { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; border-radius: 8px; padding: 3px 0 2px; position: relative; }
+.hb-sw i { display: block; width: 36px; height: 18px; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
+.hb-sw span { font: 600 10.5px/1.1 Inter, system-ui, sans-serif; color: #5b6576; font-variant-numeric: tabular-nums; }
+.hb-sw:hover { background: rgba(61,107,255,.07); }
+.hb-sw:focus-visible { outline: 2px solid #3d6bff; outline-offset: 1px; }
+.hb-sw.on { background: rgba(61,107,255,.12); }
+.hb-sw.on i { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #3d6bff; }
+.hb-sw.on span { color: #0d1b2e; }
+.hb-custom i { background: conic-gradient(#f44, #fd3, #4d6, #3cf, #66f, #f4c, #f44); }
+.hb-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.hb-name { font-size: 12px; color: #5b6576; margin-top: 4px; min-height: 15px; }`;
+
+// Raster met alle staaltjes en het kleurnummer eronder; het laatste vakje is een eigen kleur.
+// onPick(h) wordt aangeroepen bij een keuze (bij eigen kleur pas als de kiezer sluit).
+export function mountHeadbandGrid(el, list, cur, onPick, onPreview) {
+  if (!document.getElementById('hb-grid-css')) {
+    const st = document.createElement('style');
+    st.id = 'hb-grid-css';
+    st.textContent = GRID_CSS;
+    document.head.append(st);
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const same = (h) => h.colors.join() === cur.colors.join() && (h.code || '') === (cur.code || '');
+  const idx = list.findIndex(same);
+  el.innerHTML = `<div class="hb-name"></div><div class="hb-grid" role="listbox">${list.map((h, i) => `<button type="button" class="hb-sw${i === idx ? ' on' : ''}" data-i="${i}" title="${esc(headbandLabel(h))}" role="option"><i style="background:${headbandSwatch(h)}"></i><span>${esc(h.code || '–')}</span></button>`).join('')}
+    <label class="hb-sw hb-custom${idx < 0 ? ' on' : ''}" title="Eigen kleur"><i></i><span>eigen</span><input type="color" value="${cur.colors[0]}"></label></div>`;
+  const name = el.querySelector('.hb-name');
+  const label = (h) => { name.textContent = h.code || h.name ? headbandLabel(h) : `Eigen kleur ${h.colors[0]}`; };
+  label(cur);
+  const mark = (node) => el.querySelectorAll('.hb-sw').forEach((n) => n.classList.toggle('on', n === node));
+  el.querySelectorAll('button.hb-sw').forEach((btn) => btn.addEventListener('click', () => {
+    const h = list[+btn.dataset.i];
+    mark(btn); label(h); onPick(h);
+  }));
+  const custom = el.querySelector('.hb-custom'), input = custom.querySelector('input');
+  const own = () => ({ code: '', name: '', colors: [input.value] });
+  if (idx < 0) custom.querySelector('i').style.background = headbandSwatch(cur);
+  input.addEventListener('input', () => { custom.querySelector('i').style.background = headbandSwatch(own()); mark(custom); label(own()); onPreview?.(own()); });
+  input.addEventListener('change', () => onPick(own()));
+  const on = el.querySelector('.hb-sw.on'), grid = el.querySelector('.hb-grid');
+  if (on) requestAnimationFrame(() => { grid.scrollTop = Math.max(0, on.offsetTop - 40); });
+}

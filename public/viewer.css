@@ -57,7 +57,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .btn b:empty { display: none; }
 /* Uitklapmenu met opties */
 /* Zwevende knopjes rechtsboven: opties en opmerkingen */
-.fab-bar { position: absolute; top: 14px; right: 14px; z-index: 46; display: flex; gap: 8px; align-items: flex-start; }
+.fab-bar { position: absolute; top: 14px; right: 14px; z-index: 65; display: flex; gap: 8px; align-items: flex-start; }
 .menu { position: relative; }
 .fab {
   position: relative; width: 40px; height: 40px; border-radius: 50%; flex: none;
